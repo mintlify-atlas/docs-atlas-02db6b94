@@ -1,0 +1,523 @@
+---
+title: 'Settings API'
+description: 'Manage site settings, user preferences, and search functionality'
+---
+
+## Overview
+
+The Settings API provides endpoints for managing system configuration, user administration, and site preferences. Most endpoints require admin privileges.
+
+<Warning>
+  Many settings endpoints require `admin` role. Unauthorized requests will return a 403 error with `ERR_USR_INVALID_PERMS`.
+</Warning>
+
+---
+
+## Site Settings
+
+### Update Site Title and Description
+
+<RequestExample>
+```bash cURL
+curl -X POST 'https://your-domain.com/api/data/settings?tab=settings' \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "site_title_description",
+    "title": "My Blog",
+    "description": "A personal blog about technology",
+    "server_owner": "John Doe"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/data/settings?tab=settings', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'site_title_description',
+    title: 'My Blog',
+    description: 'A personal blog about technology',
+    server_owner: 'John Doe'
+  })
+});
+```
+</RequestExample>
+
+Updates the site's title, description, and copyright owner.
+
+**Admin Only**
+
+#### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to `site_title_description`
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  New site title
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  New site description
+</ParamField>
+
+<ParamField body="server_owner" type="string" required>
+  Copyright owner name
+</ParamField>
+
+---
+
+### Toggle Site Features
+
+<RequestExample>
+```javascript JavaScript
+// Get current toggle states
+const getToggles = await fetch('/api/data/settings?tab=settings', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'obtain_toggle_data_for_robotsTxt_and_others'
+  })
+});
+
+// Update toggle states
+const updateToggles = await fetch('/api/data/settings?tab=settings', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'change_home_page_register_robotstxt_toggles',
+    data: {
+      homePage: true,
+      registration: true,
+      robotsTxt: true,
+      search: true,
+      displayVersion: false
+    }
+  })
+});
+```
+</RequestExample>
+
+Manage feature toggles for the site.
+
+**Admin Only**
+
+#### Available Toggles
+
+<ParamField body="data.homePage" type="boolean">
+  Enable/disable the home page
+</ParamField>
+
+<ParamField body="data.registration" type="boolean">
+  Enable/disable user registration
+</ParamField>
+
+<ParamField body="data.robotsTxt" type="boolean">
+  Enable/disable robots.txt
+</ParamField>
+
+<ParamField body="data.search" type="boolean">
+  Enable/disable search functionality
+</ParamField>
+
+<ParamField body="data.displayVersion" type="boolean">
+  Show/hide version information
+</ParamField>
+
+---
+
+### Manage Robots.txt
+
+<RequestExample>
+```javascript JavaScript
+// Get current robots.txt configuration
+const getRobots = await fetch('/api/data/settings?tab=settings', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'pullCurrentRobotsTxt'
+  })
+});
+
+// Update robots.txt configuration
+const updateRobots = await fetch('/api/data/settings?tab=settings', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'site_robots_txt_json',
+    data: {
+      '*': {
+        allow: ['/public/*'],
+        disallow: ['/api/*', '/admin/*']
+      },
+      'Googlebot': {
+        allow: ['/*'],
+        disallow: []
+      }
+    }
+  })
+});
+```
+</RequestExample>
+
+**Admin Only**
+
+#### Robots.txt Data Format
+
+<ParamField body="data" type="object" required>
+  Object where keys are user agents and values contain allow/disallow rules
+  
+  <Expandable title="Structure">
+    <ParamField body="[userAgent].allow" type="string[]">
+      Array of allowed paths
+    </ParamField>
+    
+    <ParamField body="[userAgent].disallow" type="string[]">
+      Array of disallowed paths
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+---
+
+## User Management
+
+### Delete User
+
+<RequestExample>
+```bash cURL
+curl -X POST 'https://your-domain.com/api/data/settings?tab=admin_user_actions' \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "delete_user",
+    "user": "user_xyz789"
+  }'
+```
+</RequestExample>
+
+Permanently deletes a user and all their posts.
+
+**Admin Only**
+
+<Warning>
+  This action is irreversible. All user data and posts will be permanently deleted.
+</Warning>
+
+#### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to `delete_user`
+</ParamField>
+
+<ParamField body="user" type="string" required>
+  User ID to delete (cannot be your own ID)
+</ParamField>
+
+---
+
+### Ban User
+
+<RequestExample>
+```javascript JavaScript
+const response = await fetch('/api/data/settings?tab=admin_user_actions', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'ban_user',
+    user: 'user_xyz789',
+    reason: 'Violation of terms of service',
+    banLength: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+  })
+});
+```
+</RequestExample>
+
+Bans a user and sets all their posts to draft status.
+
+**Admin Only**
+
+#### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to `ban_user`
+</ParamField>
+
+<ParamField body="user" type="string" required>
+  User ID to ban (cannot be your own ID)
+</ParamField>
+
+<ParamField body="reason" type="string" required>
+  Reason for the ban
+</ParamField>
+
+<ParamField body="banLength" type="number">
+  Optional ban duration in milliseconds. Omit for permanent ban.
+</ParamField>
+
+---
+
+### Revoke User Sessions
+
+<RequestExample>
+```bash cURL
+curl -X POST 'https://your-domain.com/api/data/settings?tab=admin_user_actions' \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "revoke_sessions",
+    "user": "user_xyz789"
+  }'
+```
+</RequestExample>
+
+Revokes all active sessions for a user, forcing them to log in again.
+
+**Admin Only**
+
+#### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to `revoke_sessions`
+</ParamField>
+
+<ParamField body="user" type="string" required>
+  User ID whose sessions should be revoked
+</ParamField>
+
+---
+
+### Change User Role
+
+<RequestExample>
+```javascript JavaScript
+const response = await fetch('/api/data/settings?tab=admin_user_actions', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'change_perms',
+    user: 'user_xyz789',
+    role: 'admin'
+  })
+});
+```
+</RequestExample>
+
+Changes a user's role.
+
+**Admin Only**
+
+#### Request Body
+
+<ParamField body="action" type="string" required>
+  Set to `change_perms`
+</ParamField>
+
+<ParamField body="user" type="string" required>
+  User ID to update (cannot be your own ID)
+</ParamField>
+
+<ParamField body="role" type="string" required>
+  New role to assign (e.g., `admin`, `user`)
+</ParamField>
+
+---
+
+## Search
+
+<RequestExample>
+```bash cURL
+curl -X GET 'https://your-domain.com/api/data/search?query=typescript'
+```
+
+```javascript JavaScript
+const query = 'typescript';
+const response = await fetch(`/api/data/search?query=${encodeURIComponent(query)}`);
+const data = await response.json();
+```
+</RequestExample>
+
+Performs full-text search on public posts using PostgreSQL's text search capabilities.
+
+### Query Parameters
+
+<ParamField query="query" type="string" required>
+  Search query string
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the search completed successfully
+</ResponseField>
+
+<ResponseField name="msg" type="string">
+  Error message if search fails
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Search results with ranking
+  
+  <Expandable title="Search Result">
+    <ResponseField name="rows" type="array">
+      Array of matching posts
+      
+      <Expandable title="Post Object">
+        <ResponseField name="postId" type="string">
+          Post identifier
+        </ResponseField>
+        
+        <ResponseField name="type" type="string">
+          Post type: `photos`, `text`, or `video`
+        </ResponseField>
+        
+        <ResponseField name="textData" type="string">
+          Post text content
+        </ResponseField>
+        
+        <ResponseField name="rank" type="number">
+          Search relevance score (higher = more relevant)
+        </ResponseField>
+        
+        <ResponseField name="byUser" type="string">
+          User ID of post author
+        </ResponseField>
+        
+        <ResponseField name="createdAt" type="timestamp">
+          Post creation timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="queryTime" type="number">
+  Search execution time in milliseconds
+</ResponseField>
+
+<ResponseField name="disabled" type="boolean">
+  Whether search is currently disabled
+</ResponseField>
+
+### Response Examples
+
+```json Success Response
+{
+  "success": true,
+  "msg": "",
+  "data": {
+    "rows": [
+      {
+        "postId": "_ITMabc123",
+        "type": "text",
+        "textData": "Learning TypeScript is amazing!",
+        "rank": 0.9876,
+        "byUser": "user_xyz789",
+        "createdAt": "2024-01-15T10:30:00Z"
+      }
+    ]
+  },
+  "queryTime": 45.2,
+  "disabled": false
+}
+```
+
+```json Search Disabled Response
+{
+  "success": false,
+  "msg": "Search functionality is currently disabled.",
+  "data": [],
+  "queryTime": 0,
+  "disabled": true
+}
+```
+
+### Search Features
+
+<CardGroup cols={2}>
+  <Card title="Full-Text Search" icon="magnifying-glass">
+    Uses PostgreSQL's `to_tsvector` and `plainto_tsquery` for intelligent text matching
+  </Card>
+  
+  <Card title="Relevance Ranking" icon="ranking-star">
+    Results sorted by `ts_rank` relevance score
+  </Card>
+  
+  <Card title="Public Only" icon="eye">
+    Only searches posts with `status = 'public'`
+  </Card>
+  
+  <Card title="Performance Metrics" icon="gauge">
+    Returns query execution time for monitoring
+  </Card>
+</CardGroup>
+
+### Error Codes
+
+<ResponseField name="400" type="error">
+  **Bad Request**
+  - Missing `query` parameter
+  - Invalid tab or action
+</ResponseField>
+
+<ResponseField name="401" type="error">
+  **Unauthorized**
+  - Invalid session token (admin endpoints)
+</ResponseField>
+
+<ResponseField name="403" type="error">
+  **Forbidden**
+  - `ERR_USR_INVALID_PERMS` - User does not have admin role
+  - `ERR_CANNOT_BAN_THIS_USER` - Cannot ban yourself
+  - `ERR_CANNOT_CHANGE_SELF` - Cannot change your own role
+</ResponseField>
+
+<ResponseField name="500" type="error">
+  **Internal Server Error**
+  - Database error
+  - Generic error (`ERR_GENERIC`)
+</ResponseField>
+
+## Key-Value Store Schema
+
+Settings are stored in the `kvData` table:
+
+<ParamField path="id" type="integer" required>
+  Auto-incrementing primary key
+</ParamField>
+
+<ParamField path="key" type="string" required>
+  Unique setting key (e.g., `title`, `searchStatus`)
+</ParamField>
+
+<ParamField path="value" type="jsonb" required>
+  Setting value stored as JSON
+</ParamField>
+
+<ParamField path="createdAt" type="timestamp">
+  Creation timestamp
+</ParamField>
+
+<ParamField path="updatedAt" type="timestamp">
+  Last update timestamp
+</ParamField>
+
+### Common Settings Keys
+
+- `title` - Site title
+- `description` - Site description
+- `copyrightOwner` - Copyright owner name
+- `homePageStatus` - Home page enabled (boolean)
+- `registrationStatus` - Registration enabled (boolean)
+- `robotsTxtStatus` - Robots.txt enabled (boolean)
+- `searchStatus` - Search enabled (boolean)
+- `exposeVersion` - Display version (boolean)
+- `robotsTxtList` - Robots.txt configuration (object)

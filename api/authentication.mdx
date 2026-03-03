@@ -1,0 +1,446 @@
+---
+title: Authentication
+description: User authentication and session management using Better-Auth
+---
+
+Log uses [Better-Auth](https://better-auth.com) for authentication and user management. All authentication endpoints are handled through the `/api/auth/[...all]` route.
+
+## Base URL
+
+```
+POST /api/auth/[...all]
+```
+
+## Email/Password Authentication
+
+### Sign Up
+
+Create a new user account with email and password.
+
+<CodeGroup>
+```typescript Client SDK
+import { authClient } from "@/lib/auth-client";
+
+const { data, error } = await authClient.signUp.email({
+  email: "user@example.com",
+  password: "securepassword",
+  name: "John Doe"
+});
+```
+
+```bash cURL
+curl -X POST https://your-log-instance.com/api/auth/sign-up/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword",
+    "name": "John Doe"
+  }'
+```
+</CodeGroup>
+
+<ParamField body="email" type="string" required>
+  User's email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  User's display name (minimum 2 characters)
+</ParamField>
+
+<ResponseField name="user" type="object">
+  The created user object
+  
+  <Expandable title="User object">
+    <ResponseField name="id" type="string">
+      Unique user identifier
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User's email address
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's display name
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role: `admin` or `user`. First user is automatically assigned `admin` role.
+    </ResponseField>
+    
+    <ResponseField name="emailVerified" type="boolean">
+      Whether the email is verified (default: false)
+    </ResponseField>
+    
+    <ResponseField name="image" type="string | null">
+      Profile image URL
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="timestamp">
+      Account creation timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Note>
+  **First User Auto-Admin**: The first user to register on a new Log instance is automatically assigned the `admin` role. All subsequent users receive the `user` role by default.
+</Note>
+
+<Note>
+  **Registration Control**: Instance administrators can disable user registration through the admin settings. When disabled, new sign-ups will be rejected with an error.
+</Note>
+
+### Sign In
+
+Authenticate an existing user.
+
+<CodeGroup>
+```typescript Client SDK
+import { authClient } from "@/lib/auth-client";
+
+await authClient.signIn.email(
+  {
+    email: "user@example.com",
+    password: "securepassword"
+  },
+  {
+    onSuccess: () => {
+      console.log("Sign in successful");
+    },
+    onError: (error) => {
+      console.error(error.error.message);
+    }
+  }
+);
+```
+
+```bash cURL
+curl -X POST https://your-log-instance.com/api/auth/sign-in/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword"
+  }'
+```
+</CodeGroup>
+
+<ParamField body="email" type="string" required>
+  User's email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password
+</ParamField>
+
+<ResponseField name="session" type="object">
+  The created session object
+  
+  <Expandable title="Session object">
+    <ResponseField name="id" type="string">
+      Unique session identifier
+    </ResponseField>
+    
+    <ResponseField name="userId" type="string">
+      ID of the authenticated user
+    </ResponseField>
+    
+    <ResponseField name="token" type="string">
+      Session token (stored in httpOnly cookie)
+    </ResponseField>
+    
+    <ResponseField name="expiresAt" type="timestamp">
+      Session expiration timestamp
+    </ResponseField>
+    
+    <ResponseField name="ipAddress" type="string">
+      IP address of the session
+    </ResponseField>
+    
+    <ResponseField name="userAgent" type="string">
+      User agent of the client
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  The authenticated user object (same structure as sign up response)
+</ResponseField>
+
+### Sign Out
+
+End the current user session.
+
+<CodeGroup>
+```typescript Client SDK
+import { authClient } from "@/lib/auth-client";
+
+await authClient.signOut({
+  fetchOptions: {
+    onSuccess: () => {
+      router.push("/login");
+    }
+  }
+});
+```
+
+```bash cURL
+curl -X POST https://your-log-instance.com/api/auth/sign-out \
+  -H "Cookie: session-token=your-session-token"
+```
+</CodeGroup>
+
+## Session Management
+
+### Get Session
+
+Retrieve the current user session.
+
+<CodeGroup>
+```typescript Client SDK
+import { authClient } from "@/lib/auth-client";
+
+const { data: session, isPending } = authClient.useSession();
+```
+
+```typescript Server-Side
+import { auth } from "@devlogs_hosting/auth";
+import { headers } from "next/headers";
+
+const session = await auth.api.getSession({ 
+  headers: await headers() 
+});
+```
+</CodeGroup>
+
+<ResponseField name="session" type="object | null">
+  Current session if authenticated, null otherwise
+</ResponseField>
+
+<ResponseField name="user" type="object | null">
+  Current user if authenticated, null otherwise
+</ResponseField>
+
+## Admin Plugin
+
+Log uses Better-Auth's admin plugin for user management capabilities. Admin users have access to additional endpoints.
+
+### List Users
+
+Retrieve a paginated list of all users (admin only).
+
+```typescript
+import { authClient } from "@/lib/auth-client";
+
+const { data } = await authClient.admin.listUsers({
+  query: {
+    limit: 50,
+    offset: 0
+  }
+});
+```
+
+<ParamField query="limit" type="number">
+  Maximum number of users to return (default: 50)
+</ParamField>
+
+<ParamField query="offset" type="number">
+  Number of users to skip for pagination (default: 0)
+</ParamField>
+
+<ResponseField name="users" type="array">
+  Array of user objects with full details including role, ban status, and timestamps
+</ResponseField>
+
+### Update User Role
+
+Change a user's role (admin only).
+
+```typescript Server-Side
+import { auth } from "@devlogs_hosting/auth";
+import { headers } from "next/headers";
+
+await auth.api.adminUpdateUser({
+  body: {
+    userId: "user-id",
+    data: { role: "admin" } // or "user"
+  },
+  headers: await headers()
+});
+```
+
+<ParamField body="userId" type="string" required>
+  ID of the user to update
+</ParamField>
+
+<ParamField body="data.role" type="string" required>
+  New role: `admin` or `user`
+</ParamField>
+
+<Warning>
+  Admins cannot change their own role. Attempts to do so will result in an `ERR_CANNOT_CHANGE_SELF` error.
+</Warning>
+
+### Ban User
+
+Ban a user from the instance (admin only).
+
+```typescript Server-Side
+import { auth } from "@devlogs_hosting/auth";
+import { headers } from "next/headers";
+
+await auth.api.banUser({
+  body: {
+    userId: "user-id",
+    banReason: "Violation of terms",
+    banExpiresIn: 86400 // Optional: ban duration in seconds
+  },
+  headers: await headers()
+});
+```
+
+<ParamField body="userId" type="string" required>
+  ID of the user to ban
+</ParamField>
+
+<ParamField body="banReason" type="string" required>
+  Reason for the ban
+</ParamField>
+
+<ParamField body="banExpiresIn" type="number">
+  Optional ban duration in seconds. If not provided, the ban is permanent.
+</ParamField>
+
+<Note>
+  When a user is banned, all their published posts are automatically set to `draft` status, making them invisible to other users.
+</Note>
+
+### Remove User
+
+Permanently delete a user account (admin only).
+
+```typescript Server-Side
+import { auth } from "@devlogs_hosting/auth";
+import { headers } from "next/headers";
+
+await auth.api.removeUser({
+  body: {
+    userId: "user-id"
+  },
+  headers: await headers()
+});
+```
+
+<ParamField body="userId" type="string" required>
+  ID of the user to remove
+</ParamField>
+
+<Warning>
+  User deletion is permanent and cannot be undone. All user data and posts are deleted from the database.
+</Warning>
+
+### Revoke User Sessions
+
+Revoke all active sessions for a user (admin only).
+
+```typescript Server-Side
+import { auth } from "@devlogs_hosting/auth";
+import { headers } from "next/headers";
+
+await auth.api.revokeUserSessions({
+  body: {
+    userId: "user-id"
+  },
+  headers: await headers()
+});
+```
+
+<ParamField body="userId" type="string" required>
+  ID of the user whose sessions should be revoked
+</ParamField>
+
+## Database Schema
+
+Log uses the following database tables for authentication:
+
+### User Table
+
+- `id`: Unique user identifier (primary key)
+- `name`: User's display name
+- `email`: Email address (unique)
+- `emailVerified`: Email verification status
+- `image`: Profile image URL
+- `role`: User role (`admin`, `user`, or `owner`)
+- `banned`: Ban status
+- `banReason`: Reason for ban
+- `banExpires`: Ban expiration timestamp
+- `createdAt`: Account creation timestamp
+- `updatedAt`: Last update timestamp
+
+### Session Table
+
+- `id`: Unique session identifier (primary key)
+- `userId`: Reference to user (foreign key)
+- `token`: Session token (unique)
+- `expiresAt`: Session expiration timestamp
+- `ipAddress`: IP address of the session
+- `userAgent`: Client user agent
+- `impersonatedBy`: ID of admin if session is impersonated
+- `createdAt`: Session creation timestamp
+- `updatedAt`: Last update timestamp
+
+### Account Table
+
+- `id`: Unique account identifier (primary key)
+- `userId`: Reference to user (foreign key)
+- `accountId`: Provider account ID
+- `providerId`: Authentication provider ID
+- `password`: Hashed password (for email/password auth)
+- `accessToken`: OAuth access token
+- `refreshToken`: OAuth refresh token
+- `scope`: OAuth scope
+- Token expiration fields
+
+## Configuration
+
+The Better-Auth instance is configured with the following settings:
+
+```typescript
+// From ~/workspace/source/packages/auth/src/index.ts
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: schema,
+  }),
+  emailAndPassword: {
+    enabled: true,
+  },
+  plugins: [admin()],
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      httpOnly: true,
+    },
+  },
+});
+```
+
+<Info>
+  **Cookie Security**: Sessions are stored in httpOnly cookies with `sameSite: none` and `secure: true` attributes for cross-origin support and security.
+</Info>
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| `ERR_USR_INVALID_SESSION` | Invalid or expired session |
+| `ERR_USR_INVALID_PERMS` | Insufficient permissions for the requested action |
+| `ERR_CANNOT_CHANGE_SELF` | Admin attempting to modify their own role |
+| `ERR_CANNOT_BAN_THIS_USER` | Admin attempting to ban themselves |
+| `ERR_NO_USER_ATTACHED` | User ID missing from request |
+| `ERR_NO_REASON_ATTACHED` | Ban reason missing from request |
+| `ERR_REMOVE_FAILED` | User deletion failed |
+| `Registration is disabled` | User registration is disabled by instance admin |

@@ -1,0 +1,612 @@
+---
+title: Configuration Guide
+description: Configure environment variables, authentication, storage, and customize your Log instance
+---
+
+# Configuring Log
+
+This guide covers all configuration options for your Log instance, including environment variables, authentication setup, and storage configuration.
+
+## Environment Variables
+
+All environment variables should be set in `apps/web/.env`. Here's the complete configuration reference:
+
+### Required Variables
+
+<CodeGroup>
+```bash Authentication
+# Better-Auth secret key (generate a random string)
+BETTER_AUTH_SECRET="your-random-secret-key-here"
+
+# Your application URL (include protocol)
+BETTER_AUTH_URL="https://yourdomain.com"
+
+# CORS origins (JSON array or comma-separated)
+CORS_ORIGIN='["https://yourdomain.com"]'
+```
+
+```bash Database
+# PostgreSQL connection string
+DATABASE_URL="postgresql://user:password@host:5432/database"
+```
+
+```bash S3 Storage
+# S3-compatible endpoint (e.g., AWS, MinIO, Cloudflare R2)
+S3_ENDPOINT="https://s3.amazonaws.com"
+
+# S3 access credentials
+S3_ACCESS_KEY_ID="your-access-key"
+S3_SECRET_ACCESS_KEY="your-secret-key"
+
+# S3 region (default: us-east-1)
+S3_REGION="us-east-1"
+
+# S3 bucket name for media storage
+S3_BUCKET_NAME="your-bucket-name"
+```
+
+```bash Optional Settings
+# Upload size limit in MB (default: 1024)
+UPLOAD_LIMIT="1024"
+```
+</CodeGroup>
+
+<Warning>
+  Never commit your `.env` file to version control. The repository includes `.env.example` as a template - copy it to `.env` and fill in your values.
+</Warning>
+
+### Environment Variable Details
+
+#### BETTER_AUTH_SECRET
+
+A random secret key used to sign session tokens and encrypt sensitive data.
+
+**How to generate:**
+```bash
+# Using openssl
+openssl rand -base64 32
+
+# Using node
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+#### BETTER_AUTH_URL
+
+The full URL where your Log instance will be accessible. This is used for:
+- Session cookies
+- OAuth callbacks (if configured)
+- CORS validation
+
+**Examples:**
+- `http://localhost:3000` (development)
+- `https://log.yourdomain.com` (production)
+
+#### CORS_ORIGIN
+
+Defines which origins can make authenticated requests to your API.
+
+**Format:**
+```bash
+# Single origin
+CORS_ORIGIN='["https://yourdomain.com"]'
+
+# Multiple origins
+CORS_ORIGIN='["https://yourdomain.com", "https://app.yourdomain.com"]'
+```
+
+#### DATABASE_URL
+
+PostgreSQL connection string in the format:
+```
+postgresql://[user]:[password]@[host]:[port]/[database]?[params]
+```
+
+**Examples:**
+```bash
+# Local database
+DATABASE_URL="postgresql://postgres:password@localhost:5432/logs"
+
+# Hosted database (e.g., Supabase, Neon)
+DATABASE_URL="postgresql://user:pass@db.example.com:5432/logs?sslmode=require"
+```
+
+#### S3 Configuration
+
+Log stores uploaded media files in S3-compatible storage. Supported providers:
+
+- **AWS S3**
+- **Cloudflare R2**
+- **DigitalOcean Spaces**
+- **MinIO** (self-hosted)
+- **Backblaze B2**
+- Any S3-compatible service
+
+<Tabs>
+  <Tab title="AWS S3">
+    ```bash
+    S3_ENDPOINT="https://s3.amazonaws.com"
+    S3_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
+    S3_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    S3_REGION="us-east-1"
+    S3_BUCKET_NAME="my-logs-media"
+    ```
+  </Tab>
+  <Tab title="Cloudflare R2">
+    ```bash
+    S3_ENDPOINT="https://[account-id].r2.cloudflarestorage.com"
+    S3_ACCESS_KEY_ID="your-r2-access-key"
+    S3_SECRET_ACCESS_KEY="your-r2-secret-key"
+    S3_REGION="auto"
+    S3_BUCKET_NAME="logs-media"
+    ```
+  </Tab>
+  <Tab title="MinIO">
+    ```bash
+    S3_ENDPOINT="http://localhost:9000"
+    S3_ACCESS_KEY_ID="minioadmin"
+    S3_SECRET_ACCESS_KEY="minioadmin"
+    S3_REGION="us-east-1"
+    S3_BUCKET_NAME="logs"
+    ```
+  </Tab>
+</Tabs>
+
+#### UPLOAD_LIMIT
+
+Maximum file upload size in megabytes. This affects:
+- Photo uploads (JPEG, PNG, GIF, WebP)
+- Video uploads (MP4, WebM, MOV)
+
+**Default:** 1024 MB (1 GB)
+
+<Note>
+  The upload limit is enforced both client-side (for better UX) and server-side (for security). Make sure your reverse proxy and S3 provider also support your chosen limit.
+</Note>
+
+## Better-Auth Configuration
+
+Better-Auth is configured in `packages/auth/src/index.ts`. Let's explore the configuration:
+
+### Email/Password Authentication
+
+```typescript packages/auth/src/index.ts
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: schema,
+  }),
+  trustedOrigins: JSON.parse(JSON.stringify(process.env.CORS_ORIGINS || [])),
+  emailAndPassword: {
+    enabled: true,
+  },
+  plugins: [admin()],
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      httpOnly: true,
+    },
+    disableCSRFCheck: process.env.NODE_ENV === "development" ? true : false,
+    trustedProxyHeaders: true,
+  },
+});
+```
+
+### Authentication Features
+
+<CardGroup cols={2}>
+  <Card title="Admin Plugin" icon="shield">
+    Automatic admin role assignment to the first user who registers
+  </Card>
+  <Card title="Session Management" icon="clock">
+    Secure session tokens stored with IP address and user agent tracking
+  </Card>
+  <Card title="Email Verification" icon="envelope">
+    Built-in email verification support (configure SMTP if needed)
+  </Card>
+  <Card title="User Banning" icon="ban">
+    Admin capability to ban users with optional expiration dates
+  </Card>
+</CardGroup>
+
+### User Registration Control
+
+Log includes a database hook that controls user registration:
+
+```typescript packages/auth/src/index.ts
+databaseHooks: {
+  user: {
+    create: {
+      before: async (user, ctx) => {
+        // Check if registration is enabled
+        const checkIfSystemDisabledRegister = await db
+          .select()
+          .from(main_schema.kvData)
+          .where(dorm.eq(main_schema.kvData.key, "registrationStatus"))
+          .limit(1);
+        
+        if (checkIfSystemDisabledRegister[0]?.value === false) {
+          throw new Error("Registration is disabled");
+        }
+        
+        // First user becomes admin
+        const existingUsers = await db
+          .select()
+          .from(schema.user)
+          .limit(1)
+          .execute();
+        
+        if (existingUsers.length === 0) {
+          return {
+            data: {
+              ...user,
+              role: "admin",
+            },
+          };
+        }
+        
+        return {
+          data: {
+            ...user,
+            role: "user",
+          },
+        };
+      },
+    },
+  },
+}
+```
+
+<Note>
+  Registration status is controlled via the admin dashboard at `/dashboard/settings`. The value is stored in the `kv_data` table with key `registrationStatus`.
+</Note>
+
+### Adding OAuth Providers
+
+To add OAuth providers (Google, GitHub, etc.), modify the auth configuration:
+
+<Steps>
+  <Step title="Install Provider Plugin">
+    Better-Auth supports many OAuth providers out of the box. Check the [Better-Auth documentation](https://www.better-auth.com/docs/authentication/social) for available providers.
+  </Step>
+
+  <Step title="Update Auth Config">
+    Edit `packages/auth/src/index.ts`:
+
+    ```typescript
+    import { google, github } from "better-auth/providers";
+
+    export const auth = betterAuth({
+      // ... existing config
+      socialProviders: {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        },
+        github: {
+          clientId: process.env.GITHUB_CLIENT_ID!,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+        },
+      },
+    });
+    ```
+  </Step>
+
+  <Step title="Add Environment Variables">
+    Add provider credentials to `.env`:
+
+    ```bash
+    GOOGLE_CLIENT_ID="your-client-id"
+    GOOGLE_CLIENT_SECRET="your-client-secret"
+    GITHUB_CLIENT_ID="your-client-id"
+    GITHUB_CLIENT_SECRET="your-client-secret"
+    ```
+  </Step>
+
+  <Step title="Update Login UI">
+    Modify `apps/web/src/app/login/client.tsx` to include OAuth buttons.
+  </Step>
+</Steps>
+
+## Database Schema
+
+Log uses Drizzle ORM with PostgreSQL. The schema is split across two files:
+
+### Authentication Schema
+
+Defined in `packages/db/src/schema/auth.ts`:
+
+- **user** - User accounts with roles, ban status, and email verification
+- **session** - Active sessions with IP tracking
+- **account** - OAuth provider accounts linked to users
+- **verification** - Email verification tokens
+
+### Application Schema
+
+Defined in `packages/db/src/schema/main.ts`:
+
+- **user_posts** - Posts with support for text, photos, and videos
+- **kv_data** - Key-value store for system settings
+- **url_shorter** - URL shortening service
+- **collections** - Post collections for organizing content
+
+### Post Types and Constraints
+
+Posts support three types with specific constraints:
+
+```typescript packages/db/src/schema/main.ts
+export const userPosts = pgTable(
+  "user_posts",
+  {
+    postId: text("post_id").primaryKey(),
+    type: text("type").notNull(), // 'photos', 'text', 'video'
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    byUser: text("by_user").notNull().references(() => user.id),
+    textData: text("text_data"),
+    imageUrl: text("image_url"),
+    videoUrl: text("video_url"),
+    status: text("status").notNull().default("draft"), // 'draft', 'private', 'public', 'unlisted'
+    tags: jsonb("tags").default([]),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    check("type_check", sql`${table.type} IN ('photos', 'text', 'video')`),
+    check("checkcorrectstatus", sql`${table.status} IN ('draft', 'private', 'public', 'unlisted')`),
+    check("image_url_check", sql`${table.type} != 'photos' OR ${table.imageUrl} IS NOT NULL`),
+    check("video_url_check", sql`${table.type} != 'video' OR ${table.videoUrl} IS NOT NULL`),
+    index("title_search_index").using("gin", sql`to_tsvector('english', ${table.textData})`),
+  ],
+);
+```
+
+<Note>
+  The schema includes database constraints to ensure data integrity and a GIN index for full-text search on post content.
+</Note>
+
+## System Settings (KV Data)
+
+Log uses a key-value store for system-wide settings. Admins can configure these via the dashboard:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `title` | string | Site title displayed in metadata and header |
+| `description` | string | Site description for SEO |
+| `copyrightOwner` | string | Copyright owner name in footer |
+| `registrationStatus` | boolean | Whether new user registration is enabled |
+| `robotsTxtList` | string | Custom robots.txt configuration |
+
+### Accessing System Settings
+
+Settings are queried in server components:
+
+```typescript apps/web/src/app/dashboard/settings/page.tsx
+const kvTitle = await db
+  .select()
+  .from(main_schema.kvData)
+  .where(dorm.eq(main_schema.kvData.key, "title"));
+
+const kvDescription = await db
+  .select()
+  .from(main_schema.kvData)
+  .where(dorm.eq(main_schema.kvData.key, "description"));
+```
+
+## File Upload Configuration
+
+File uploads are handled through the `/api/data/publish/file` endpoint with AWS SDK v3:
+
+### Supported File Types
+
+<Tabs>
+  <Tab title="Images">
+    - JPEG (`.jpg`, `.jpeg`)
+    - PNG (`.png`)
+    - GIF (`.gif`)
+    - WebP (`.webp`)
+  </Tab>
+  <Tab title="Videos">
+    - MP4 (`.mp4`)
+    - WebM (`.webm`)
+    - QuickTime (`.mov`)
+  </Tab>
+</Tabs>
+
+### Upload Flow
+
+<Steps>
+  <Step title="Client-side Validation">
+    The client validates file type and size before upload:
+
+    ```typescript
+    const allowedTypes = [
+      "image/jpeg", "image/png", "image/gif", "image/webp",
+      "video/mp4", "video/webm", "video/quicktime",
+    ];
+
+    const maxSize = (uploadLimit || 50) * 1024 * 1024; // Default 50MB
+    ```
+  </Step>
+
+  <Step title="Server Upload">
+    Files are uploaded to S3 using the AWS SDK with multipart upload support for large files.
+  </Step>
+
+  <Step title="Database Record">
+    After successful upload, the file URL is stored in the database with the post record.
+  </Step>
+</Steps>
+
+<Warning>
+  Make sure your S3 bucket has appropriate CORS configuration to allow uploads from your domain. Also configure bucket policies for public read access if serving images directly.
+</Warning>
+
+## Drizzle Configuration
+
+Database migrations and schema management are handled by Drizzle Kit:
+
+```typescript packages/db/drizzle.config.ts
+import { defineConfig } from "drizzle-kit";
+import dotenv from "dotenv";
+
+dotenv.config({
+  path: "../../apps/web/.env",
+});
+
+export default defineConfig({
+  schema: "./src/schema",
+  out: "./src/migrations",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL || "",
+  },
+});
+```
+
+### Database Commands
+
+<CodeGroup>
+```bash Generate Migration
+# Create a new migration from schema changes
+bun run db:generate
+```
+
+```bash Run Migrations
+# Apply pending migrations to the database
+bun run db:migrate
+```
+
+```bash Push Schema (Dev)
+# Push schema changes directly without migrations
+bun run db:push
+```
+
+```bash Database Studio
+# Open Drizzle Studio for visual database management
+bun run db:studio
+```
+</CodeGroup>
+
+## Production Deployment Checklist
+
+Before deploying to production:
+
+<Steps>
+  <Step title="Environment Variables">
+    - [ ] Set strong `BETTER_AUTH_SECRET`
+    - [ ] Configure production `BETTER_AUTH_URL`
+    - [ ] Set up production `DATABASE_URL`
+    - [ ] Configure S3 credentials and bucket
+    - [ ] Set appropriate `UPLOAD_LIMIT`
+    - [ ] Configure `CORS_ORIGIN` for your domain
+  </Step>
+
+  <Step title="Database">
+    - [ ] Run migrations: `bun run db:migrate`
+    - [ ] Set up database backups
+    - [ ] Configure connection pooling if needed
+  </Step>
+
+  <Step title="Storage">
+    - [ ] Create S3 bucket with appropriate permissions
+    - [ ] Configure bucket CORS policy
+    - [ ] Set up CDN (optional) for media delivery
+  </Step>
+
+  <Step title="Security">
+    - [ ] Enable HTTPS/SSL
+    - [ ] Configure secure cookie settings
+    - [ ] Set up rate limiting (optional)
+    - [ ] Enable CSRF protection (automatic in production)
+  </Step>
+
+  <Step title="Monitoring">
+    - [ ] Set up error tracking
+    - [ ] Configure logging
+    - [ ] Monitor database performance
+    - [ ] Monitor S3 usage and costs
+  </Step>
+</Steps>
+
+## Customization Options
+
+### Site Branding
+
+Customize your Log instance through the admin dashboard:
+
+1. Navigate to `/dashboard/settings` (admin only)
+2. Configure:
+   - Site title (appears in browser tab and metadata)
+   - Site description (used for SEO)
+   - Copyright owner (displayed in footer)
+
+### robots.txt
+
+Control search engine crawling via the admin panel. The configuration is stored in the `kv_data` table and served at `/robots.txt`.
+
+### Upload Limits
+
+Adjust the `UPLOAD_LIMIT` environment variable to control maximum file sizes. Consider:
+
+- Storage costs
+- Bandwidth limits
+- User experience (large uploads can be slow)
+- S3 provider limits
+
+<Note>
+  Changes to `UPLOAD_LIMIT` require rebuilding the Docker image or restarting the development server.
+</Note>
+
+## Troubleshooting
+
+### Authentication Issues
+
+**Problem:** Users can't log in or sessions expire immediately
+
+**Solutions:**
+- Verify `BETTER_AUTH_SECRET` is set and consistent across restarts
+- Check `BETTER_AUTH_URL` matches your actual domain
+- Ensure cookies are enabled in the browser
+- In production, verify HTTPS is enabled (required for secure cookies)
+
+### Database Connection Errors
+
+**Problem:** "Connection refused" or "Authentication failed"
+
+**Solutions:**
+- Verify `DATABASE_URL` format and credentials
+- Check PostgreSQL is running and accepting connections
+- Ensure database exists and migrations have been run
+- Check firewall rules if using remote database
+
+### S3 Upload Failures
+
+**Problem:** File uploads fail or return errors
+
+**Solutions:**
+- Verify all S3 environment variables are set correctly
+- Check S3 bucket exists and credentials have write permissions
+- Verify CORS configuration on the bucket
+- Check file size doesn't exceed `UPLOAD_LIMIT`
+- Ensure S3 endpoint URL is correct for your provider
+
+### First User Not Getting Admin Role
+
+**Problem:** First registered user doesn't have admin access
+
+**Solutions:**
+- Check database is completely empty before first registration
+- Manually update user role in database:
+  ```sql
+  UPDATE "user" SET role = 'admin' WHERE email = 'your@email.com';
+  ```
+- Clear any test users before creating production admin
+
+## Next Steps
+
+With your Log instance configured:
+
+- Create your first post from the dashboard
+- Explore collections to organize your content
+- Set up URL shortening for easy sharing
+- Customize privacy settings for each post
+- Invite team members (if registration is enabled)

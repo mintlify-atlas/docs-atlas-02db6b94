@@ -1,0 +1,135 @@
+---
+title: Introduction to Log
+description: A self-hosted platform for logging development updates, memories, and life moments with full control over your data
+---
+
+# Welcome to Log
+
+Log is a self-hosted platform that combines the best of development logging and memory keeping. Inspired by the need for a personal space to document development progress and life moments, Log gives you full control over your data while providing a beautiful, modern interface.
+
+## Why Log?
+
+After Hack Club's neighborhood ended, many developers felt the need for a platform to log their development process and share updates. Log fills that gap by providing:
+
+- **Full ownership** of your data with self-hosted infrastructure
+- **Flexible content types** - text posts, photos, and videos
+- **Privacy controls** - draft, private, unlisted, and public posts
+- **Collections** - organize related posts (trips, projects, etc.)
+- **Tag system** - categorize and search your content
+- **S3-compatible storage** - use any S3 provider for media files
+- **Built-in authentication** - secure user management with Better-Auth
+
+<CardGroup cols={2}>
+  <Card title="Quick Installation" icon="rocket" href="/installation">
+    Get Log running with Docker in under 5 minutes
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Configure authentication, storage, and customize your instance
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/hpware/logs">
+    View the source code and contribute to the project
+  </Card>
+  <Card title="Better-Auth Docs" icon="book" href="https://www.better-auth.com/docs/authentication/email-password">
+    Learn about authentication configuration options
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Multiple Content Types
+
+Create different types of posts to capture various moments:
+
+- **Text posts** - Share thoughts, updates, and development logs
+- **Photo posts** - Upload and share images (JPEG, PNG, GIF, WebP)
+- **Video posts** - Share video content (MP4, WebM, MOV)
+
+Each post type supports tags, collections, and customizable text descriptions.
+
+### Privacy & Publishing Options
+
+Control who sees your content with four visibility levels:
+
+<CardGroup cols={2}>
+  <Card title="Draft" icon="file">
+    Work in progress - only visible to you
+  </Card>
+  <Card title="Private" icon="lock">
+    Published but only accessible when logged in
+  </Card>
+  <Card title="Unlisted" icon="link">
+    Accessible via direct link only
+  </Card>
+  <Card title="Public" icon="globe">
+    Visible on your public feed and search
+  </Card>
+</CardGroup>
+
+### Collections
+
+Organize related posts into collections. Perfect for:
+- Trip documentation
+- Project development logs
+- Themed content series
+- Personal milestones
+
+### Advanced Search
+
+Log includes full-text search powered by PostgreSQL's text search capabilities:
+- Search across all your posts
+- Filter by tags
+- Filter by content type
+- Find posts by user
+
+### URL Shortening
+
+Built-in URL shortening service using `/u/[slug]` paths, or bring your own Shlink server.
+
+## Technology Stack
+
+Log is built with modern, reliable technologies:
+
+- **Next.js 16** - React framework with App Router
+- **Better-Auth** - Secure authentication with email/password
+- **Drizzle ORM** - Type-safe database queries
+- **PostgreSQL** - Robust relational database
+- **Bun** - Fast JavaScript runtime and package manager
+- **shadcn/ui** - Beautiful, accessible UI components
+- **Tailwind CSS** - Utility-first styling
+- **Sonner** - Toast notifications
+- **Docker** - Containerized deployment
+
+<Note>
+  Log uses a monorepo structure with Bun workspaces, separating the web app, database layer, and authentication package for better maintainability.
+</Note>
+
+## What's Next?
+
+<Steps>
+  <Step title="Install Log">
+    Follow the [installation guide](/installation) to set up Log with Docker
+  </Step>
+  <Step title="Configure Your Instance">
+    Set up environment variables, authentication, and S3 storage in the [configuration guide](/configuration)
+  </Step>
+  <Step title="Create Your First Post">
+    Log in and start documenting your journey with text, photos, or videos
+  </Step>
+  <Step title="Customize Settings">
+    As an admin, customize your site title, description, and registration settings
+  </Step>
+</Steps>
+
+<Warning>
+  Log is under active development (currently v0.1.14). Some features like the edit system and admin toggles are being improved. Check the [GitHub issues](https://github.com/hpware/logs/issues) for known issues.
+</Warning>
+
+## Community & Support
+
+Log is open source and welcomes contributions:
+
+- Report bugs and request features on [GitHub Issues](https://github.com/hpware/logs/issues)
+- Contribute code via pull requests
+- Share your self-hosted instance with the community
+
+Ready to get started? Head to the [installation guide](/installation) to set up your own Log instance.

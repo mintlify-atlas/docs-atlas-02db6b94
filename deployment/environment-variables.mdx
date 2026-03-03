@@ -1,0 +1,444 @@
+---
+title: Environment Variables
+description: Complete reference for all environment variables required to run Log
+---
+
+Log requires several environment variables for authentication, database, storage, and configuration. All variables should be set in your `.env` file.
+
+## Getting Started
+
+Copy the example environment file:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+```
+
+## Required Variables
+
+<AccordionGroup>
+  <Accordion title="DATABASE_URL" icon="database">
+    PostgreSQL database connection string.
+
+    **Required:** Yes  
+    **Format:** `postgresql://username:password@host:port/database`
+
+    ```bash
+    DATABASE_URL="postgresql://user:pass@localhost:5432/logs"
+    ```
+
+    **Examples:**
+    <CodeGroup>
+      ```bash Local
+      DATABASE_URL="postgresql://postgres:password@localhost:5432/logs"
+      ```
+
+      ```bash Docker
+      DATABASE_URL="postgresql://logs:password@postgres:5432/logs"
+      ```
+
+      ```bash Cloud (Neon, Supabase, etc.)
+      DATABASE_URL="postgresql://user:password@ep-cool-forest-123456.us-east-2.aws.neon.tech/logs?sslmode=require"
+      ```
+    </CodeGroup>
+
+    <Note>
+      The database connection is used by Drizzle ORM in `packages/db/src/index.ts`
+    </Note>
+  </Accordion>
+
+  <Accordion title="BETTER_AUTH_SECRET" icon="key">
+    Secret key for Better Auth session encryption.
+
+    **Required:** Yes  
+    **Format:** Random string (minimum 32 characters)
+
+    ```bash
+    BETTER_AUTH_SECRET="your-super-secret-key-min-32-chars"
+    ```
+
+    **Generate a secure secret:**
+    ```bash
+    openssl rand -base64 32
+    ```
+
+    <Warning>
+      Keep this secret secure. Changing it will invalidate all existing sessions.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="BETTER_AUTH_URL" icon="link">
+    Public URL where your Log instance is accessible.
+
+    **Required:** Yes  
+    **Format:** Full URL with protocol
+
+    ```bash
+    BETTER_AUTH_URL="https://your-domain.com"
+    ```
+
+    **Examples:**
+    - Production: `https://logs.yourdomain.com`
+    - Development: `http://localhost:3000`
+    - Staging: `https://staging.logs.yourdomain.com`
+
+    <Note>
+      This is used by Better Auth for redirect URLs and cookie configuration.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+## S3 Storage Configuration
+
+Log uses S3-compatible storage for media files (images and videos). All S3 variables are required for file uploads to work.
+
+<AccordionGroup>
+  <Accordion title="S3_ENDPOINT" icon="server">
+    S3 API endpoint URL.
+
+    **Required:** Yes  
+    **Format:** Full URL with protocol
+
+    ```bash
+    S3_ENDPOINT="https://s3.amazonaws.com"
+    ```
+
+    **Provider Examples:**
+    <CodeGroup>
+      ```bash AWS S3
+      S3_ENDPOINT="https://s3.amazonaws.com"
+      # Or regional: https://s3.us-west-2.amazonaws.com
+      ```
+
+      ```bash Cloudflare R2
+      S3_ENDPOINT="https://[account-id].r2.cloudflarestorage.com"
+      ```
+
+      ```bash MinIO (Self-hosted)
+      S3_ENDPOINT="https://minio.yourdomain.com"
+      ```
+
+      ```bash DigitalOcean Spaces
+      S3_ENDPOINT="https://nyc3.digitaloceanspaces.com"
+      ```
+
+      ```bash Backblaze B2
+      S3_ENDPOINT="https://s3.us-west-002.backblazeb2.com"
+      ```
+    </CodeGroup>
+  </Accordion>
+
+  <Accordion title="S3_ACCESS_KEY_ID" icon="id-card">
+    S3 access key ID for authentication.
+
+    **Required:** Yes  
+    **Format:** Alphanumeric string
+
+    ```bash
+    S3_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
+    ```
+
+    <Note>
+      Obtain from your S3 provider's IAM/access key management console.
+    </Note>
+  </Accordion>
+
+  <Accordion title="S3_SECRET_ACCESS_KEY" icon="lock">
+    S3 secret access key for authentication.
+
+    **Required:** Yes  
+    **Format:** Alphanumeric string
+
+    ```bash
+    S3_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    ```
+
+    <Warning>
+      Never commit this to version control. Keep it secure.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="S3_BUCKET_NAME" icon="box">
+    S3 bucket name for storing uploaded files.
+
+    **Required:** Yes  
+    **Format:** Bucket name (lowercase, no spaces)
+
+    ```bash
+    S3_BUCKET_NAME="logs-media-files"
+    ```
+
+    <Note>
+      The bucket must exist and be accessible with the provided credentials. Files are stored with the pattern: `{userId}/{timestamp}_{randomId}.{extension}`
+    </Note>
+  </Accordion>
+
+  <Accordion title="S3_REGION" icon="globe">
+    S3 bucket region.
+
+    **Required:** No  
+    **Default:** `us-east-1`
+
+    ```bash
+    S3_REGION="us-east-1"
+    ```
+
+    **Common regions:**
+    - AWS: `us-east-1`, `us-west-2`, `eu-west-1`, etc.
+    - Cloudflare R2: `auto`
+    - MinIO: Can be any string
+  </Accordion>
+
+  <Accordion title="S3_FORCE_PATH_STYLE" icon="route">
+    Force path-style S3 URLs (required for some providers).
+
+    **Required:** No  
+    **Default:** `false`  
+    **Format:** `true` or `false`
+
+    ```bash
+    S3_FORCE_PATH_STYLE="true"
+    ```
+
+    <Info>
+      Set to `true` for MinIO and some other S3-compatible providers.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+### S3 Configuration Validation
+
+The application validates S3 configuration at runtime (see `apps/web/src/lib/s3.ts:10`):
+
+```typescript
+function isS3Configured(): boolean {
+  return !!(
+    process.env.S3_ACCESS_KEY_ID &&
+    process.env.S3_SECRET_ACCESS_KEY &&
+    process.env.S3_BUCKET_NAME
+  );
+}
+```
+
+## Optional Configuration
+
+<AccordionGroup>
+  <Accordion title="CORS_ORIGIN" icon="shield">
+    Trusted origins for CORS and authentication.
+
+    **Required:** No  
+    **Default:** `[]` (empty array)  
+    **Format:** JSON array of URLs
+
+    ```bash
+    CORS_ORIGIN='["https://your-domain.com","https://app.your-domain.com"]'
+    ```
+
+    <Note>
+      Used by Better Auth's `trustedOrigins` configuration in `packages/auth/src/index.ts:13`
+    </Note>
+  </Accordion>
+
+  <Accordion title="UPLOAD_LIMIT" icon="file-arrow-up">
+    Maximum file upload size in megabytes.
+
+    **Required:** No  
+    **Default:** `1024` (1 GB)  
+    **Format:** Number (in MB)
+
+    ```bash
+    UPLOAD_LIMIT="1024"
+    ```
+
+    **Examples:**
+    - 50 MB: `UPLOAD_LIMIT="50"`
+    - 500 MB: `UPLOAD_LIMIT="500"`
+    - 2 GB: `UPLOAD_LIMIT="2048"`
+
+    <Note>
+      This is exposed as `NEXT_PUBLIC_UPLOAD_LIMIT` to the frontend and used in upload validation.
+    </Note>
+  </Accordion>
+
+  <Accordion title="NODE_ENV" icon="code">
+    Node.js environment mode.
+
+    **Required:** No  
+    **Default:** Set by Docker to `production`  
+    **Format:** `development`, `production`, or `test`
+
+    ```bash
+    NODE_ENV="production"
+    ```
+
+    <Info>
+      In development mode, CSRF checks are disabled for Better Auth.
+    </Info>
+  </Accordion>
+
+  <Accordion title="PORT" icon="plug">
+    Port for the Next.js server.
+
+    **Required:** No  
+    **Default:** `3000`  
+    **Format:** Number
+
+    ```bash
+    PORT="3000"
+    ```
+  </Accordion>
+
+  <Accordion title="HOSTNAME" icon="network-wired">
+    Hostname for the Next.js server to bind to.
+
+    **Required:** No  
+    **Default:** `0.0.0.0` (in Docker)  
+    **Format:** IP address or hostname
+
+    ```bash
+    HOSTNAME="0.0.0.0"
+    ```
+  </Accordion>
+
+  <Accordion title="NEXT_TELEMETRY_DISABLED" icon="chart-simple">
+    Disable Next.js telemetry.
+
+    **Required:** No  
+    **Default:** `1` (disabled in Docker)  
+    **Format:** `1` to disable
+
+    ```bash
+    NEXT_TELEMETRY_DISABLED="1"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example
+
+Here's a complete `.env` file with all variables:
+
+```bash .env
+# Authentication
+BETTER_AUTH_SECRET="your-super-secret-key-change-this-in-production"
+BETTER_AUTH_URL="https://logs.yourdomain.com"
+CORS_ORIGIN='["https://logs.yourdomain.com"]'
+
+# Database
+DATABASE_URL="postgresql://logs:password@postgres:5432/logs"
+
+# S3 Storage
+S3_ENDPOINT="https://s3.amazonaws.com"
+S3_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
+S3_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+S3_REGION="us-east-1"
+S3_BUCKET_NAME="logs-media-production"
+
+# Optional
+UPLOAD_LIMIT="1024"
+```
+
+## Environment-Specific Configurations
+
+<Tabs>
+  <Tab title="Development">
+    ```bash .env.development
+    BETTER_AUTH_SECRET="dev-secret-key-change-this"
+    BETTER_AUTH_URL="http://localhost:3000"
+    DATABASE_URL="postgresql://postgres:password@localhost:5432/logs_dev"
+    S3_ENDPOINT="http://localhost:9000"
+    S3_ACCESS_KEY_ID="minioadmin"
+    S3_SECRET_ACCESS_KEY="minioadmin"
+    S3_REGION="us-east-1"
+    S3_BUCKET_NAME="logs-dev"
+    S3_FORCE_PATH_STYLE="true"
+    UPLOAD_LIMIT="100"
+    NODE_ENV="development"
+    ```
+  </Tab>
+
+  <Tab title="Production">
+    ```bash .env.production
+    BETTER_AUTH_SECRET="${USE_SECRETS_MANAGER}"
+    BETTER_AUTH_URL="https://logs.yourdomain.com"
+    CORS_ORIGIN='["https://logs.yourdomain.com"]'
+    DATABASE_URL="${USE_SECRETS_MANAGER}"
+    S3_ENDPOINT="https://s3.amazonaws.com"
+    S3_ACCESS_KEY_ID="${USE_SECRETS_MANAGER}"
+    S3_SECRET_ACCESS_KEY="${USE_SECRETS_MANAGER}"
+    S3_REGION="us-east-1"
+    S3_BUCKET_NAME="logs-production"
+    UPLOAD_LIMIT="1024"
+    NODE_ENV="production"
+    NEXT_TELEMETRY_DISABLED="1"
+    ```
+  </Tab>
+
+  <Tab title="Docker">
+    ```bash .env.docker
+    BETTER_AUTH_SECRET="${GENERATE_WITH_OPENSSL}"
+    BETTER_AUTH_URL="https://logs.yourdomain.com"
+    DATABASE_URL="postgresql://logs:password@postgres:5432/logs"
+    S3_ENDPOINT="https://s3.amazonaws.com"
+    S3_ACCESS_KEY_ID="${YOUR_KEY}"
+    S3_SECRET_ACCESS_KEY="${YOUR_SECRET}"
+    S3_REGION="us-east-1"
+    S3_BUCKET_NAME="logs-docker"
+    UPLOAD_LIMIT="1024"
+    PORT="3000"
+    HOSTNAME="0.0.0.0"
+    ```
+  </Tab>
+</Tabs>
+
+## Security Best Practices
+
+<Warning>
+  - Never commit `.env` files to version control
+  - Use secrets management in production (AWS Secrets Manager, HashiCorp Vault, etc.)
+  - Rotate secrets regularly
+  - Use different credentials for different environments
+  - Limit S3 IAM permissions to only what's needed
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Missing required environment variables">
+    If you see errors about missing variables:
+
+    1. Check that `.env` file exists
+    2. Verify all required variables are set
+    3. Restart the application after making changes
+    4. Check for typos in variable names
+  </Accordion>
+
+  <Accordion title="S3 connection errors">
+    If file uploads fail:
+
+    1. Verify S3 credentials are correct
+    2. Check bucket exists and is accessible
+    3. Verify endpoint URL is correct for your provider
+    4. Test with `S3_FORCE_PATH_STYLE="true"` if using MinIO
+    5. Check bucket CORS configuration allows your domain
+  </Accordion>
+
+  <Accordion title="Database connection errors">
+    If database connection fails:
+
+    1. Verify DATABASE_URL format is correct
+    2. Check database is running and accessible
+    3. Verify credentials are correct
+    4. Check SSL mode if using cloud databases
+    5. Ensure database exists before running migrations
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Deploy Log using Docker containers
+  </Card>
+  <Card title="Database Setup" icon="database" href="/deployment/database">
+    Set up PostgreSQL and run migrations
+  </Card>
+</CardGroup>

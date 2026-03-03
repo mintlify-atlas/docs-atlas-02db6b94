@@ -1,0 +1,135 @@
+---
+title: 'Collections API'
+description: 'Manage and organize your content collections'
+---
+
+## Get All Collections
+
+<RequestExample>
+```bash cURL
+curl -X GET https://your-domain.com/api/data/get_all_collections \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/data/get_all_collections', {
+  method: 'GET',
+  credentials: 'include'
+});
+const data = await response.json();
+```
+</RequestExample>
+
+Retrieves all collections belonging to the authenticated user.
+
+### Authentication
+
+Requires a valid session token. Returns 401 if not authenticated.
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of collection objects
+  
+  <Expandable title="Collection Object">
+    <ResponseField name="collectionId" type="string">
+      Unique identifier for the collection
+    </ResponseField>
+    
+    <ResponseField name="slug" type="string">
+      URL-friendly identifier for the collection
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Display name of the collection
+    </ResponseField>
+    
+    <ResponseField name="items" type="object">
+      JSON object containing collection items
+    </ResponseField>
+    
+    <ResponseField name="byUser" type="string">
+      User ID of the collection owner
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="timestamp">
+      Collection creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="timestamp">
+      Last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message if request fails, empty string on success
+</ResponseField>
+
+### Response Example
+
+```json Success Response
+{
+  "data": [
+    {
+      "collectionId": "col_abc123",
+      "slug": "my-photos",
+      "title": "My Photos",
+      "items": {},
+      "byUser": "user_xyz789",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "message": ""
+}
+```
+
+```json Error Response
+{
+  "data": [],
+  "message": "ERR_NOT_LOGGED_IN"
+}
+```
+
+### Error Codes
+
+<ResponseField name="ERR_NOT_LOGGED_IN" type="401">
+  User is not authenticated. Session token is missing or invalid.
+</ResponseField>
+
+## Database Schema
+
+Collections are stored with the following schema:
+
+<ParamField path="id" type="integer" required>
+  Auto-incrementing primary key
+</ParamField>
+
+<ParamField path="collectionId" type="string" required>
+  Unique identifier for the collection
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Collection display name
+</ParamField>
+
+<ParamField path="slug" type="string" required>
+  Unique URL-friendly identifier
+</ParamField>
+
+<ParamField path="items" type="jsonb" default="{}">
+  JSON object storing collection items and metadata
+</ParamField>
+
+<ParamField path="byUser" type="string" required>
+  Foreign key reference to user ID
+</ParamField>
+
+<ParamField path="createdAt" type="timestamp">
+  Automatically set on creation
+</ParamField>
+
+<ParamField path="updatedAt" type="timestamp">
+  Automatically updated on modification
+</ParamField>

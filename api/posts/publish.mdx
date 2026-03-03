@@ -1,0 +1,300 @@
+---
+title: Upload Files
+description: Upload images and videos for use in posts
+---
+
+## Endpoint
+
+```
+POST /api/data/publish/file
+```
+
+Uploads image or video files to S3 storage for use in posts. Returns a URL that can be used when creating posts.
+
+## Authentication
+
+This endpoint requires authentication. The request must include a valid session token.
+
+## Request Body
+
+This endpoint expects `multipart/form-data` content type.
+
+<ParamField body="file" type="File" required>
+  The image or video file to upload
+</ParamField>
+
+## Supported File Types
+
+### Images
+- `image/jpeg`
+- `image/png`
+- `image/gif`
+- `image/webp`
+
+### Videos
+- `video/mp4`
+- `video/webm`
+- `video/quicktime`
+
+## File Size Limits
+
+The maximum file size is configurable via the `NEXT_PUBLIC_UPLOAD_LIMIT` environment variable.
+
+- Default: 50MB
+- Files exceeding the limit will be rejected with a 413 status code
+
+## Response
+
+<ResponseField name="msg" type="string" required>
+  Success or error message
+</ResponseField>
+
+<ResponseField name="uploadUrl" type="string" required>
+  The URL path to the uploaded file (format: `/api/data/files/{filename}`). Use this URL when creating posts
+</ResponseField>
+
+<ResponseField name="fileSize" type="number">
+  Size of the uploaded file in bytes (only present on success)
+</ResponseField>
+
+<ResponseField name="contentType" type="string">
+  MIME type of the uploaded file (only present on success)
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```javascript JavaScript
+const fileInput = document.querySelector('input[type="file"]');
+const file = fileInput.files[0];
+
+const formData = new FormData();
+formData.append('file', file);
+
+const response = await fetch('/api/data/publish/file', {
+  method: 'POST',
+  body: formData
+});
+
+const data = await response.json();
+console.log(data);
+// {
+//   msg: "File uploaded successfully",
+//   uploadUrl: "/api/data/files/user123_1234567890_image.jpg",
+//   fileSize: 2048576,
+//   contentType: "image/jpeg"
+// }
+
+// Use the uploadUrl when creating a post
+const postResponse = await fetch('/api/data/publish', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    type: 'photos',
+    imageUrl: data.uploadUrl,
+    text: 'My uploaded photo',
+    status: 'public'
+  })
+});
+```
+
+```javascript React Example
+import { useState } from 'react';
+
+function FileUpload() {
+  const [uploading, setUploading] = useState(false);
+  const [uploadUrl, setUploadUrl] = useState('');
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/data/publish/file', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUploadUrl(data.uploadUrl);
+        console.log('Upload successful:', data);
+      } else {
+        console.error('Upload failed:', data.msg);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <input 
+        type="file" 
+        onChange={handleUpload}
+        accept="image/*,video/*"
+        disabled={uploading}
+      />
+      {uploading && <p>Uploading...</p>}
+      {uploadUrl && <p>Uploaded to: {uploadUrl}</p>}
+    </div>
+  );
+}
+```
+
+```python Python
+import requests
+
+# Upload an image file
+with open('photo.jpg', 'rb') as f:
+    files = {'file': f}
+    response = requests.post(
+        'https://your-log-instance.com/api/data/publish/file',
+        files=files
+    )
+
+data = response.json()
+print(data)
+# {
+#   'msg': 'File uploaded successfully',
+#   'uploadUrl': '/api/data/files/user123_1234567890_photo.jpg',
+#   'fileSize': 2048576,
+#   'contentType': 'image/jpeg'
+# }
+
+# Use the uploadUrl to create a post
+import requests
+
+post_response = requests.post(
+    'https://your-log-instance.com/api/data/publish',
+    json={
+        'type': 'photos',
+        'imageUrl': data['uploadUrl'],
+        'text': 'My uploaded photo',
+        'status': 'public'
+    }
+)
+```
+
+```bash cURL
+curl -X POST https://your-log-instance.com/api/data/publish/file \
+  -F "file=@/path/to/image.jpg"
+```
+
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400 Bad Request - No File">
+  ```json
+  {
+    "success": false,
+    "msg": "No file provided",
+    "uploadUrl": ""
+  }
+  ```
+  The request did not include a file.
+</ResponseField>
+
+<ResponseField name="400 Bad Request - Invalid Type">
+  ```json
+  {
+    "msg": "File type not allowed",
+    "uploadUrl": ""
+  }
+  ```
+  The file type is not in the list of allowed types.
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  ```json
+  {
+    "success": false,
+    "msg": "Authentication required",
+    "uploadUrl": ""
+  }
+  ```
+  The request is missing valid authentication credentials.
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  ```json
+  {
+    "msg": "S3 access denied. Check credentials.",
+    "uploadUrl": ""
+  }
+  ```
+  S3 storage access was denied. Contact your instance administrator.
+</ResponseField>
+
+<ResponseField name="413 Payload Too Large">
+  ```json
+  {
+    "msg": "File size too large. Maximum allowed size is 50MB.",
+    "uploadUrl": ""
+  }
+  ```
+  The file exceeds the maximum allowed size.
+</ResponseField>
+
+<ResponseField name="503 Service Unavailable">
+  ```json
+  {
+    "msg": "File upload is not available - S3 storage not configured",
+    "uploadUrl": ""
+  }
+  ```
+  S3 storage is not configured on this instance. Contact your instance administrator.
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error">
+  ```json
+  {
+    "success": false,
+    "msg": "S3 bucket not found. Check configuration.",
+    "uploadUrl": ""
+  }
+  ```
+  S3 configuration error. Contact your instance administrator.
+</ResponseField>
+
+## File Metadata
+
+Uploaded files include the following metadata in S3:
+
+- `originalName` - The original filename
+- `uploadedBy` - User ID of the uploader
+- `uploadedAt` - ISO 8601 timestamp of when the file was uploaded
+
+## File Naming
+
+Files are automatically renamed using the pattern:
+```
+{userId}_{timestamp}_{originalFilename}
+```
+
+This ensures unique filenames and prevents conflicts.
+
+## S3 Configuration
+
+This endpoint requires S3 to be configured with the following environment variables:
+
+- `S3_BUCKET_NAME` - The S3 bucket name
+- S3 credentials (region, access keys, etc.)
+
+If S3 is not configured, the endpoint will return a 503 error.
+
+## Source Reference
+
+Implementation: `~/workspace/source/apps/web/src/app/api/data/publish/file/route.ts:8`

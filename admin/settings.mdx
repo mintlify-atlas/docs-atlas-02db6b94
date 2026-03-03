@@ -1,0 +1,297 @@
+---
+title: System Settings
+description: Configure system-wide settings using the KV data store
+---
+
+## Overview
+
+Log stores system configuration in a key-value (KV) data table, allowing dynamic configuration without code changes. Settings control features like registration, home page display, search functionality, and more.
+
+## KV Data Schema
+
+The settings are stored in the `kv_data` table:
+
+```typescript ~/workspace/source/packages/db/src/schema/main.ts
+export const kvData = pgTable("kv_data", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  key: text("key").notNull().unique(),
+  value: jsonb("value").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+```
+
+<Info>
+The `value` field uses JSONB, allowing storage of any JSON-serializable data including booleans, strings, numbers, objects, and arrays.
+</Info>
+
+## Available Settings
+
+### Site Information
+
+<ParamField path="title" type="string">
+  The site title displayed across your Log instance
+</ParamField>
+
+<ParamField path="description" type="string">
+  The site description used for meta tags and SEO
+</ParamField>
+
+<ParamField path="copyrightOwner" type="string">
+  The copyright owner name displayed in the footer
+</ParamField>
+
+#### Update Site Information
+
+```typescript
+// POST /api/data/settings?tab=settings
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.title })
+  .where(dorm.eq(main_schema.kvData.key, "title"));
+
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.description })
+  .where(dorm.eq(main_schema.kvData.key, "description"));
+
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.server_owner })
+  .where(dorm.eq(main_schema.kvData.key, "copyrightOwner"));
+```
+
+### Feature Toggles
+
+Log provides several boolean toggles to enable or disable features:
+
+<CardGroup cols={2}>
+  <Card title="Registration" icon="user-plus">
+    **Key:** `registrationStatus`  
+    **Type:** boolean  
+    **Description:** Enable or disable new user registration
+  </Card>
+  
+  <Card title="Home Page" icon="house">
+    **Key:** `homePageStatus`  
+    **Type:** boolean  
+    **Description:** Show or hide the home page
+  </Card>
+  
+  <Card title="Search" icon="magnifying-glass">
+    **Key:** `searchStatus`  
+    **Type:** boolean  
+    **Description:** Enable or disable search functionality
+  </Card>
+  
+  <Card title="Robots.txt" icon="robot">
+    **Key:** `robotsTxtStatus`  
+    **Type:** boolean  
+    **Description:** Enable or disable robots.txt file
+  </Card>
+  
+  <Card title="Version Display" icon="code-branch">
+    **Key:** `exposeVersion`  
+    **Type:** boolean  
+    **Description:** Display or hide version information
+  </Card>
+</CardGroup>
+
+### Registration Control
+
+The registration control is enforced at the database level during user creation:
+
+```typescript ~/workspace/source/packages/auth/src/index.ts
+const checkIfSystemDisabledRegister = await db
+  .select()
+  .from(main_schema.kvData)
+  .where(dorm.eq(main_schema.kvData.key, "registrationStatus"))
+  .limit(1);
+
+if (checkIfSystemDisabledRegister[0]?.value === false) {
+  throw new Error("Registration is disabled");
+}
+```
+
+<Warning>
+Disabling registration prevents all new user signups, but does not affect existing users. The first user registration always succeeds to create the initial admin.
+</Warning>
+
+## Managing Settings
+
+### Get Current Toggle States
+
+```typescript
+// POST /api/data/settings?tab=settings
+// Request body:
+{
+  "action": "obtain_toggle_data_for_robotsTxt_and_others"
+}
+
+// Response:
+{
+  "success": true,
+  "status": 200,
+  "data": {
+    "homePage": true,
+    "registration": true,
+    "robotsTxt": false,
+    "search": true,
+    "displayVersion": false
+  }
+}
+```
+
+### Update Toggle Settings
+
+```typescript ~/workspace/source/apps/web/src/app/api/data/settings/route.ts
+// POST /api/data/settings?tab=settings
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.data.homePage })
+  .where(dorm.eq(main_schema.kvData.key, "homePageStatus"));
+
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.data.registration })
+  .where(dorm.eq(main_schema.kvData.key, "registrationStatus"));
+
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.data.robotsTxt })
+  .where(dorm.eq(main_schema.kvData.key, "robotsTxtStatus"));
+
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.data.search })
+  .where(dorm.eq(main_schema.kvData.key, "searchStatus"));
+
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.data.displayVersion })
+  .where(dorm.eq(main_schema.kvData.key, "exposeVersion"));
+```
+
+<CodeGroup>
+```json Request
+{
+  "action": "change_home_page_register_robotstxt_toggles",
+  "data": {
+    "homePage": true,
+    "registration": false,
+    "robotsTxt": true,
+    "search": true,
+    "displayVersion": false
+  }
+}
+```
+
+```json Response
+{
+  "success": true,
+  "status": 200,
+  "msg": ""
+}
+```
+</CodeGroup>
+
+### Robots.txt Configuration
+
+Log supports dynamic robots.txt configuration stored as a JSON object:
+
+```typescript
+// Structure: Record<string, { allow: string[], disallow: string[] }>
+type RobotsParsedJson = Record<string, { 
+  allow: string[]; 
+  disallow: string[]; 
+}>;
+```
+
+#### Update Robots.txt Rules
+
+<CodeGroup>
+```typescript Update
+// POST /api/data/settings?tab=settings
+await db
+  .update(main_schema.kvData)
+  .set({ value: body.data })
+  .where(dorm.eq(main_schema.kvData.key, "robotsTxtList"));
+```
+
+```json Example Configuration
+{
+  "action": "site_robots_txt_json",
+  "data": {
+    "*": {
+      "allow": ["/"],
+      "disallow": ["/admin", "/settings"]
+    },
+    "Googlebot": {
+      "allow": ["/", "/posts"],
+      "disallow": ["/api"]
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Settings API Reference
+
+<ParamField path="endpoint" type="string">
+  `/api/data/settings?tab=settings`
+</ParamField>
+
+<ParamField path="method" type="string">
+  `POST`
+</ParamField>
+
+<ParamField path="authentication" type="string">
+  Requires admin role
+</ParamField>
+
+<ResponseField name="actions" type="object">
+  Available settings actions:
+  
+  <Expandable title="action types">
+    - `site_title_description` - Update site title, description, and copyright owner
+    - `obtain_toggle_data_for_robotsTxt_and_others` - Get current toggle states
+    - `change_home_page_register_robotstxt_toggles` - Update feature toggles
+    - `site_robots_txt_json` - Update robots.txt configuration
+    - `pullCurrentRobotsTxt` - Get current robots.txt configuration
+  </Expandable>
+</ResponseField>
+
+## Authorization
+
+All settings endpoints require admin authentication:
+
+```typescript ~/workspace/source/apps/web/src/app/api/data/settings/route.ts
+if (session.user.role !== "admin") {
+  statusCode = 403;
+  throw new Error("ERR_USR_INVALID_PERMS");
+}
+```
+
+<Info>
+Only users with the `admin` role can access and modify system settings. Regular users receive a 403 Forbidden error.
+</Info>
+
+## Best Practices
+
+<Steps>
+  <Step title="Disable Registration After Initial Setup">
+    After creating necessary accounts, consider disabling registration to prevent unauthorized signups.
+  </Step>
+  
+  <Step title="Configure Robots.txt Carefully">
+    Review your robots.txt rules to ensure search engines can properly index your content.
+  </Step>
+  
+  <Step title="Use Version Display Wisely">
+    Only expose version information if you're comfortable with users knowing your Log version.
+  </Step>
+  
+  <Step title="Monitor Search Status">
+    Disable search temporarily if you notice performance issues or need to reindex.
+  </Step>
+</Steps>

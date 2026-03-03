@@ -1,0 +1,200 @@
+---
+title: User Management
+description: Manage users, roles, and permissions in your Log instance
+---
+
+## Overview
+
+Log provides comprehensive user management capabilities for administrators. The first user to register automatically becomes an admin, and admins can manage all other users, control permissions, and moderate content.
+
+## Automatic Admin Assignment
+
+When you first set up Log, the first user to register is automatically assigned the admin role. This is handled in the authentication system:
+
+```typescript ~/workspace/source/packages/auth/src/index.ts
+// If no users exist, make this user an admin
+if (existingUsers.length === 0) {
+  return {
+    data: {
+      ...user,
+      role: "admin",
+    },
+  };
+}
+```
+
+<Info>
+The first user registration is critical - ensure you create your admin account immediately after deploying Log to prevent unauthorized admin access.
+</Info>
+
+## User Schema
+
+Log uses the following user schema with role-based access control:
+
+```typescript ~/workspace/source/packages/db/src/schema/auth.ts
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  image: text("image"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
+});
+```
+
+## Admin Capabilities
+
+### Change User Roles
+
+Admins can promote users to admin or demote them to regular users:
+
+<CodeGroup>
+```typescript API Route
+// POST /api/data/settings?tab=admin_user_actions
+await auth.api.adminUpdateUser({
+  body: {
+    userId: body.user,
+    data: { role: body.role },
+  },
+  headers: await headers(),
+});
+```
+
+```json Request Body
+{
+  "action": "change_perms",
+  "user": "user_id_here",
+  "role": "admin" // or "user"
+}
+```
+</CodeGroup>
+
+<Warning>
+Admins cannot change their own role to prevent accidental lockout.
+</Warning>
+
+### Ban Users
+
+Ban users temporarily or permanently, with support for ban reasons and expiration:
+
+<CodeGroup>
+```typescript Ban User
+// POST /api/data/settings?tab=admin_user_actions
+await auth.api.banUser({
+  body: {
+    userId: body.user,
+    banReason: body.reason,
+    ...(body.banLength && { banExpiresIn: body.banLength }),
+  },
+  headers: header,
+});
+
+// Set all user posts to draft
+await db
+  .update(main_schema.userPosts)
+  .set({ status: "draft" })
+  .where(dorm.eq(main_schema.userPosts.byUser, body.user));
+```
+
+```json Request Body
+{
+  "action": "ban_user",
+  "user": "user_id_here",
+  "reason": "Violation of terms of service",
+  "banLength": 604800000 // optional: ban duration in milliseconds (7 days)
+}
+```
+</CodeGroup>
+
+<Info>
+When a user is banned, all their posts are automatically set to draft status, hiding them from public view.
+</Info>
+
+### Delete Users
+
+Permanently remove users and all their content:
+
+```typescript ~/workspace/source/apps/web/src/app/api/data/settings/route.ts
+// Delete all user posts
+await db
+  .delete(main_schema.userPosts)
+  .where(dorm.eq(main_schema.userPosts.byUser, body.user));
+
+// Remove user account
+const data = await auth.api.removeUser({
+  body: {
+    userId: body.user,
+  },
+  headers: header,
+});
+```
+
+<Warning>
+User deletion is permanent and cannot be undone. All posts and data associated with the user will be permanently deleted.
+</Warning>
+
+### Revoke User Sessions
+
+Force logout users by revoking all their active sessions:
+
+```typescript
+// POST /api/data/settings?tab=admin_user_actions
+const data = await auth.api.revokeUserSessions({
+  body: {
+    userId: body.user,
+  },
+  headers: header,
+});
+```
+
+## Registration Controls
+
+Admins can enable or disable user registration using the `registrationStatus` setting stored in the KV data table. See [Settings](/admin/settings) for more details.
+
+## Admin Actions Reference
+
+All admin user actions are performed through the settings API:
+
+<ParamField path="endpoint" type="string">
+  `/api/data/settings?tab=admin_user_actions`
+</ParamField>
+
+<ParamField path="method" type="string">
+  `POST`
+</ParamField>
+
+<ResponseField name="actions" type="object">
+  Available admin actions:
+  
+  <Expandable title="action types">
+    - `delete_user` - Permanently delete a user and their content
+    - `ban_user` - Ban a user with optional expiration
+    - `revoke_sessions` - Force logout a user
+    - `change_perms` - Change user role (admin/user)
+  </Expandable>
+</ResponseField>
+
+## Best Practices
+
+<Steps>
+  <Step title="Create Admin Account First">
+    Register your admin account immediately after deploying Log to ensure security.
+  </Step>
+  
+  <Step title="Document Ban Reasons">
+    Always provide clear ban reasons for transparency and record-keeping.
+  </Step>
+  
+  <Step title="Use Temporary Bans">
+    Consider temporary bans (with expiration) for first-time offenses.
+  </Step>
+  
+  <Step title="Revoke Sessions for Security">
+    When banning users, also revoke their sessions to prevent continued access.
+  </Step>
+</Steps>

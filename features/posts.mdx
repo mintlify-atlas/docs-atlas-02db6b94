@@ -1,0 +1,253 @@
+---
+title: Posts
+description: Create and manage photos, text, and video posts with flexible visibility controls
+---
+
+## Overview
+
+Posts are the core content type in Log. Users can create three types of posts: text updates, photo posts, and video content. Each post supports rich metadata including tags, custom text descriptions, and granular visibility controls.
+
+## Post Types
+
+Log supports three distinct post types, each optimized for different content:
+
+<CardGroup cols={3}>
+  <Card title="Text Posts" icon="text">
+    Simple text-based updates and notes
+  </Card>
+  <Card title="Photo Posts" icon="image">
+    Image uploads with optional captions
+  </Card>
+  <Card title="Video Posts" icon="video">
+    Video content with descriptions
+  </Card>
+</CardGroup>
+
+### Database Schema
+
+Posts are stored in the `user_posts` table with the following structure:
+
+```typescript
+{
+  postId: string,           // Unique identifier (format: _ITM[A-Za-z0-9]{20})
+  type: "photos" | "text" | "video",
+  createdAt: Date,
+  updatedAt: Date,
+  byUser: string,           // User ID reference
+  textData: string | null,  // Text content or caption
+  imageUrl: string | null,  // Photo URL (required for photos type)
+  videoUrl: string | null,  // Video URL (required for video type)
+  status: "draft" | "private" | "public" | "unlisted",
+  tags: string[]            // Array of tags
+}
+```
+
+## Creating Posts
+
+### User Workflow
+
+1. **Navigate to Create**: Users access the post creation interface at `/dashboard/posts/create`
+2. **Select Post Type**: Choose between Text, Photo, or Video tabs
+3. **Add Content**:
+   - For text posts: Enter content in the text area
+   - For photos/videos: Upload media files via drag-and-drop or file picker
+4. **Set Visibility**: Choose post status (Draft, Private, Link-only, or Public)
+5. **Add Metadata**: Optionally add tags and assign to collections
+6. **Publish**: Submit the post to save it
+
+<Info>
+  The maximum file size for uploads is configurable via `NEXT_PUBLIC_UPLOAD_LIMIT` (default: 50MB). Supported formats include JPEG, PNG, GIF, WebP for images, and MP4, WebM, MOV for videos.
+</Info>
+
+### API Endpoint
+
+Posts are created via the `/api/data/publish` endpoint:
+
+```typescript
+// POST /api/data/publish
+{
+  "type": "photos" | "text" | "video",
+  "text": "Optional caption or content",
+  "imageUrl": "https://...",  // Required for photos
+  "videoUrl": "https://...",  // Required for video
+  "status": "draft" | "private" | "public" | "unlisted",
+  "tags": ["tag1", "tag2"]
+}
+
+// Response
+{
+  "success": true,
+  "msg": "",
+  "postId": "_ITM..."
+}
+```
+
+<CodeGroup>
+```typescript Example Request
+const response = await fetch("/api/data/publish", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    type: "photos",
+    text: "Beautiful sunset from the beach",
+    imageUrl: "https://cdn.example.com/sunset.jpg",
+    status: "public",
+    tags: ["nature", "photography"]
+  })
+});
+
+const result = await response.json();
+console.log(result.postId); // _ITM1a2b3c4d5e6f7g8h9i0j
+```
+</CodeGroup>
+
+## Visibility Controls
+
+Log offers four visibility levels for posts:
+
+| Status | Description | Public Access | Search Indexing |
+|--------|-------------|---------------|------------------|
+| **Draft** | Work in progress, only visible to author | No | No |
+| **Private** | Saved but hidden from others | No | No |
+| **Link-only** (Unlisted) | Accessible via direct link only | Yes (with link) | No |
+| **Public** | Fully visible and searchable | Yes | Yes |
+
+<Warning>
+  Only posts with "public" status appear in search results and on public profiles.
+</Warning>
+
+## Managing Posts
+
+### Viewing All Posts
+
+Users can view their posts in the management interface at `/dashboard/posts/manage`. Posts are displayed in a table format showing:
+
+- Post type indicator (text/photo/video icon)
+- Text content preview (truncated to 50 characters)
+- Creation timestamp
+- Edit and Delete actions
+
+### Retrieving Posts via API
+
+The `/api/data/all_posts` endpoint supports pagination:
+
+```typescript
+// GET /api/data/all_posts?offset=0&status=public
+{
+  "success": true,
+  "msg": "",
+  "result": [...],  // Array of up to 100 posts
+  "nextOffset": 100  // Offset for next page (undefined if no more)
+}
+```
+
+### Editing Posts
+
+Users can edit posts at `/dashboard/posts/edit/[postId]` with the ability to:
+
+- Modify text content and captions
+- Update visibility status
+- Change tags
+- Preview changes in real-time
+
+Changes are submitted to `/api/data/modify/posts?tab=edit`:
+
+```typescript
+// POST /api/data/modify/posts?tab=edit
+{
+  "action": "change_post",
+  "postId": "_ITM...",
+  "postStatus": {
+    // Updated post object
+  }
+}
+```
+
+### Deleting Posts
+
+Deletion is available through the management interface with confirmation:
+
+```typescript
+// POST /api/data/modify/posts?tab=post_manage
+{
+  "action": "delete_post",
+  "postId": "_ITM..."
+}
+```
+
+<Warning>
+  Post deletion is permanent and cannot be undone. Users are prompted with a confirmation dialog before deletion.
+</Warning>
+
+## Tags and Organization
+
+### Adding Tags
+
+Tags help organize and categorize posts:
+
+- Enter tags during post creation or editing
+- Press Enter or Space to add a tag
+- Maximum 20 characters per tag
+- Tags are stored as a JSON array
+- Click tags to remove them
+
+### Collections Integration
+
+Posts can be added to collections during creation for better organization. See the [Collections](/features/collections) documentation for more details.
+
+## File Upload Process
+
+### Upload Flow
+
+1. **File Selection**: User selects or drags a file
+2. **Validation**: File type and size are checked client-side
+3. **Upload**: File is sent to `/api/data/publish/file` via FormData
+4. **Storage**: Server processes and stores the file
+5. **URL Return**: Server returns the uploaded file URL
+6. **Post Creation**: URL is included in the post creation request
+
+### Supported Formats
+
+<AccordionGroup>
+  <Accordion title="Image Formats">
+    - JPEG (`.jpg`, `.jpeg`)
+    - PNG (`.png`)
+    - GIF (`.gif`)
+    - WebP (`.webp`)
+  </Accordion>
+  <Accordion title="Video Formats">
+    - MP4 (`.mp4`)
+    - WebM (`.webm`)
+    - QuickTime (`.mov`)
+  </Accordion>
+</AccordionGroup>
+
+## Authentication & Authorization
+
+All post operations require authentication:
+
+- Users must have an active session
+- Banned users cannot create or modify posts
+- Users can only edit/delete their own posts
+- Admins have elevated permissions for moderation
+
+<Note>
+  Authentication is handled via Better Auth. The session is validated on every request to post endpoints.
+</Note>
+
+## Best Practices
+
+<Steps>
+  <Step title="Start with Drafts">
+    Create posts as drafts to preview before publishing publicly
+  </Step>
+  <Step title="Use Meaningful Tags">
+    Add relevant tags to make your posts discoverable
+  </Step>
+  <Step title="Optimize File Sizes">
+    Compress images and videos before upload to stay within size limits
+  </Step>
+  <Step title="Preview Before Publishing">
+    Use the preview feature to see how your post will appear
+  </Step>
+</Steps>

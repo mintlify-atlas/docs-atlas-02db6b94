@@ -1,0 +1,201 @@
+---
+title: Create Post
+description: Create a new post with text, photo, or video content
+---
+
+## Endpoint
+
+```
+POST /api/data/publish
+```
+
+Creates a new post for the authenticated user. Posts can contain text, images, or videos.
+
+## Authentication
+
+This endpoint requires authentication. The request must include a valid session token.
+
+## Request Body
+
+<ParamField body="type" type="string" required>
+  Type of post to create. Must be one of: `photos`, `text`, or `video`
+</ParamField>
+
+<ParamField body="text" type="string">
+  Text content for the post. Can be combined with any post type
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  URL of the uploaded image. Required when `type` is `photos`. Use the [Upload File](/api/posts/publish) endpoint to upload images first
+</ParamField>
+
+<ParamField body="videoUrl" type="string">
+  URL of the uploaded video. Required when `type` is `video`. Use the [Upload File](/api/posts/publish) endpoint to upload videos first
+</ParamField>
+
+<ParamField body="tags" type="array">
+  Array of tags to associate with the post
+</ParamField>
+
+<ParamField body="status" type="string">
+  Visibility status for the post. Must be one of: `draft`, `private`, `public`, or `unlisted`. Defaults to `draft`
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean" required>
+  Whether the post was created successfully
+</ResponseField>
+
+<ResponseField name="msg" type="string" required>
+  Error message if the request failed, empty string on success
+</ResponseField>
+
+<ResponseField name="postId" type="string | null" required>
+  The unique ID of the created post (format: `_ITM` followed by 20 alphanumeric characters), or `null` if creation failed
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```javascript Text Post
+const response = await fetch('/api/data/publish', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    type: 'text',
+    text: 'This is my first post on Log!',
+    tags: ['introduction', 'first-post'],
+    status: 'public'
+  })
+});
+
+const data = await response.json();
+console.log(data);
+// { success: true, msg: "", postId: "_ITMabc123xyz456..." }
+```
+
+```javascript Photo Post
+// First upload the image
+const formData = new FormData();
+formData.append('file', imageFile);
+
+const uploadResponse = await fetch('/api/data/publish/file', {
+  method: 'POST',
+  body: formData
+});
+
+const { uploadUrl } = await uploadResponse.json();
+
+// Then create the post
+const response = await fetch('/api/data/publish', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    type: 'photos',
+    text: 'Check out this amazing view!',
+    imageUrl: uploadUrl,
+    tags: ['photography', 'nature'],
+    status: 'public'
+  })
+});
+
+const data = await response.json();
+console.log(data);
+// { success: true, msg: "", postId: "_ITMdef789ghi012..." }
+```
+
+```javascript Video Post
+// First upload the video
+const formData = new FormData();
+formData.append('file', videoFile);
+
+const uploadResponse = await fetch('/api/data/publish/file', {
+  method: 'POST',
+  body: formData
+});
+
+const { uploadUrl } = await uploadResponse.json();
+
+// Then create the post
+const response = await fetch('/api/data/publish', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    type: 'video',
+    text: 'My latest video project',
+    videoUrl: uploadUrl,
+    status: 'unlisted'
+  })
+});
+
+const data = await response.json();
+console.log(data);
+// { success: true, msg: "", postId: "_ITMjkl345mno678..." }
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://your-log-instance.com/api/data/publish',
+    json={
+        'type': 'text',
+        'text': 'Hello from Python!',
+        'tags': ['python', 'api'],
+        'status': 'public'
+    }
+)
+
+data = response.json()
+print(data)
+# {'success': True, 'msg': '', 'postId': '_ITMpqr901stu234...'}
+```
+
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="401 Unauthorized">
+  ```json
+  {
+    "success": false,
+    "msg": "Authentication required",
+    "postId": null
+  }
+  ```
+  The request is missing valid authentication credentials.
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  ```json
+  {
+    "success": false,
+    "msg": "You have been banned by the instence admins.",
+    "postId": null
+  }
+  ```
+  The user account has been banned.
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error">
+  ```json
+  {
+    "success": false,
+    "msg": "Error message",
+    "postId": null
+  }
+  ```
+  An internal error occurred while creating the post.
+</ResponseField>
+
+## Source Reference
+
+Implementation: `~/workspace/source/apps/web/src/app/api/data/publish/route.ts:12`

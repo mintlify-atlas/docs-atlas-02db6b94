@@ -1,0 +1,215 @@
+---
+title: 'Files API'
+description: 'Upload and retrieve files from S3 storage'
+---
+
+## Upload File
+
+<RequestExample>
+```bash cURL
+curl -X POST https://your-domain.com/api/data/publish/file \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -F "file=@/path/to/image.jpg"
+```
+
+```javascript JavaScript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('/api/data/publish/file', {
+  method: 'POST',
+  credentials: 'include',
+  body: formData
+});
+const data = await response.json();
+```
+</RequestExample>
+
+Uploads a file to S3 storage. Supports images and videos.
+
+### Authentication
+
+Requires a valid session token. Returns 401 if not authenticated.
+
+### Request Body
+
+<ParamField body="file" type="file" required>
+  The file to upload (multipart/form-data)
+</ParamField>
+
+### Supported File Types
+
+<AccordionGroup>
+  <Accordion title="Images">
+    - `image/jpeg`
+    - `image/png`
+    - `image/gif`
+    - `image/webp`
+  </Accordion>
+  
+  <Accordion title="Videos">
+    - `video/mp4`
+    - `video/webm`
+    - `video/quicktime`
+  </Accordion>
+</AccordionGroup>
+
+### File Size Limits
+
+The maximum file size is configurable via the `NEXT_PUBLIC_UPLOAD_LIMIT` environment variable (default: 50MB).
+
+### Response
+
+<ResponseField name="msg" type="string">
+  Success or error message
+</ResponseField>
+
+<ResponseField name="uploadUrl" type="string">
+  URL path to access the uploaded file
+</ResponseField>
+
+<ResponseField name="fileSize" type="number">
+  Size of the uploaded file in bytes
+</ResponseField>
+
+<ResponseField name="contentType" type="string">
+  MIME type of the uploaded file
+</ResponseField>
+
+### Response Examples
+
+```json Success Response
+{
+  "msg": "File uploaded successfully",
+  "uploadUrl": "/api/data/files/user_123/20240115_image_abc.jpg",
+  "fileSize": 245760,
+  "contentType": "image/jpeg"
+}
+```
+
+```json Error Response - File Too Large
+{
+  "msg": "File size too large. Maximum allowed size is 50MB.",
+  "uploadUrl": ""
+}
+```
+
+### Error Codes
+
+<ResponseField name="400" type="error">
+  **Invalid Request**
+  - No file provided
+  - File type not allowed
+</ResponseField>
+
+<ResponseField name="401" type="error">
+  **Unauthorized**
+  - Authentication required
+</ResponseField>
+
+<ResponseField name="403" type="error">
+  **Forbidden**
+  - S3 access denied. Check credentials.
+</ResponseField>
+
+<ResponseField name="413" type="error">
+  **Payload Too Large**
+  - File size exceeds the configured limit
+</ResponseField>
+
+<ResponseField name="503" type="error">
+  **Service Unavailable**
+  - S3 storage not configured
+  - Network error
+</ResponseField>
+
+---
+
+## Get File
+
+<RequestExample>
+```bash cURL
+curl -X GET https://your-domain.com/api/data/files/user_123/image.jpg
+```
+
+```javascript JavaScript
+const response = await fetch('/api/data/files/user_123/image.jpg');
+const blob = await response.blob();
+const imageUrl = URL.createObjectURL(blob);
+```
+
+```html HTML
+<img src="/api/data/files/user_123/image.jpg" alt="Uploaded image" />
+```
+</RequestExample>
+
+Retrieves a file from S3 storage. This endpoint accepts a dynamic path that maps to the S3 object key.
+
+### URL Parameters
+
+<ParamField path="slug" type="string[]" required>
+  File path segments (e.g., `/user_123/folder/image.jpg`)
+</ParamField>
+
+### Response
+
+Returns the binary file content with appropriate headers:
+
+<ResponseField name="Content-Type" type="header">
+  MIME type of the file (e.g., `image/jpeg`, `video/mp4`)
+</ResponseField>
+
+<ResponseField name="Content-Length" type="header">
+  Size of the file in bytes
+</ResponseField>
+
+<ResponseField name="Cache-Control" type="header">
+  Set to `public, max-age=31536000` (1 year cache)
+</ResponseField>
+
+<ResponseField name="ETag" type="header">
+  Entity tag for cache validation
+</ResponseField>
+
+<ResponseField name="Last-Modified" type="header">
+  Last modification timestamp of the file
+</ResponseField>
+
+### Error Codes
+
+<ResponseField name="404" type="error">
+  **Not Found**
+  - File content not found
+  - File does not exist in S3
+</ResponseField>
+
+<ResponseField name="503" type="error">
+  **Service Unavailable**
+  - S3 storage not configured
+</ResponseField>
+
+### File Metadata
+
+Uploaded files include metadata stored in S3:
+
+<ParamField path="originalName" type="string">
+  Original filename before processing
+</ParamField>
+
+<ParamField path="uploadedBy" type="string">
+  User ID who uploaded the file
+</ParamField>
+
+<ParamField path="uploadedAt" type="string">
+  ISO 8601 timestamp of upload
+</ParamField>
+
+## S3 Configuration
+
+<Warning>
+  File upload and retrieval require proper S3 configuration. Ensure the following environment variables are set:
+  - `S3_BUCKET_NAME`
+  - `S3_ACCESS_KEY_ID`
+  - `S3_SECRET_ACCESS_KEY`
+  - `S3_REGION`
+</Warning>

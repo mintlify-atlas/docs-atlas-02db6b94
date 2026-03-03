@@ -1,0 +1,261 @@
+---
+title: Modify Post
+description: Update or delete existing posts
+---
+
+## Endpoint
+
+```
+POST /api/data/modify/posts?tab={action}
+```
+
+Modifies or deletes existing posts. Only the post author (or admins for certain actions) can modify posts.
+
+## Authentication
+
+This endpoint requires authentication. The request must include a valid session token.
+
+## Query Parameters
+
+<ParamField query="tab" type="string" required>
+  The action to perform:
+  - `post_manage` - Delete posts
+  - `edit` - Update post content and status
+</ParamField>
+
+## Request Body
+
+The request body varies depending on the action.
+
+### Delete Post (`tab=post_manage`)
+
+<ParamField body="action" type="string" required>
+  Must be `delete_post` (user deletion) or `delete_post_admin` (admin deletion)
+</ParamField>
+
+<ParamField body="postId" type="string" required>
+  The unique ID of the post to delete (format: `_ITM` followed by 20 alphanumeric characters)
+</ParamField>
+
+### Edit Post (`tab=edit`)
+
+<ParamField body="action" type="string" required>
+  Must be `change_post`
+</ParamField>
+
+<ParamField body="postId" type="string" required>
+  The unique ID of the post to update (format: `_ITM` followed by 20 alphanumeric characters)
+</ParamField>
+
+<ParamField body="postStatus" type="object" required>
+  Complete post object with updated fields
+</ParamField>
+
+<ParamField body="postStatus.postId" type="string" required>
+  Must match the `postId` parameter
+</ParamField>
+
+<ParamField body="postStatus.status" type="string" required>
+  Updated visibility status: `draft`, `private`, `public`, or `unlisted`
+</ParamField>
+
+<ParamField body="postStatus.type" type="string" required>
+  Post type: `photos`, `text`, or `video`
+</ParamField>
+
+<ParamField body="postStatus.byUser" type="string" required>
+  User ID of the post author (must match authenticated user)
+</ParamField>
+
+<ParamField body="postStatus.textData" type="string | null">
+  Updated text content
+</ParamField>
+
+<ParamField body="postStatus.tags" type="array">
+  Updated tags array
+</ParamField>
+
+<ParamField body="postStatus.imageUrl" type="string | null">
+  Image URL (required for photo posts)
+</ParamField>
+
+<ParamField body="postStatus.videoUrl" type="string | null">
+  Video URL (required for video posts)
+</ParamField>
+
+<ParamField body="postStatus.createdAt" type="timestamp" required>
+  Original creation timestamp
+</ParamField>
+
+<ParamField body="postStatus.updatedAt" type="timestamp" required>
+  Last update timestamp
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="null" required>
+  Always `null` for this endpoint
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  `"ok"` on success, or an error code if the request failed
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```javascript Delete Post
+const response = await fetch('/api/data/modify/posts?tab=post_manage', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    action: 'delete_post',
+    postId: '_ITMabc123xyz456...'
+  })
+});
+
+const data = await response.json();
+console.log(data);
+// { data: null, message: "ok" }
+```
+
+```javascript Admin Delete
+// Requires admin role
+const response = await fetch('/api/data/modify/posts?tab=post_manage', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    action: 'delete_post_admin',
+    postId: '_ITMabc123xyz456...'
+  })
+});
+
+const data = await response.json();
+console.log(data);
+// { data: null, message: "ok" }
+```
+
+```javascript Update Post
+const response = await fetch('/api/data/modify/posts?tab=edit', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    action: 'change_post',
+    postId: '_ITMabc123xyz456...',
+    postStatus: {
+      postId: '_ITMabc123xyz456...',
+      status: 'public',
+      type: 'text',
+      byUser: 'user_id_here',
+      textData: 'Updated post content',
+      tags: ['updated', 'edited'],
+      imageUrl: null,
+      videoUrl: null,
+      createdAt: '2024-01-15T10:30:00Z',
+      updatedAt: '2024-01-15T14:30:00Z'
+    }
+  })
+});
+
+const data = await response.json();
+console.log(data);
+// { data: null, message: "ok" }
+```
+
+```python Python
+import requests
+
+# Delete a post
+response = requests.post(
+    'https://your-log-instance.com/api/data/modify/posts?tab=post_manage',
+    json={
+        'action': 'delete_post',
+        'postId': '_ITMabc123xyz456...'
+    }
+)
+
+data = response.json()
+print(data)
+# {'data': None, 'message': 'ok'}
+```
+
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+  ```json
+  {
+    "data": null,
+    "message": "ERR_NO_BODY_ID"
+  }
+  ```
+  The request is missing the required `postId` field.
+</ResponseField>
+
+<ResponseField name="400 Bad Request">
+  ```json
+  {
+    "data": null,
+    "message": "ERR_WRONG_POSTID"
+  }
+  ```
+  The `postId` format is invalid. Must match pattern: `_ITM[A-Za-z0-9]{20}`
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  ```json
+  {
+    "data": null,
+    "message": "ERR_USR_INVALID_SESSION"
+  }
+  ```
+  The request is missing valid authentication credentials.
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  ```json
+  {
+    "data": null,
+    "message": "ERR_NO_PERMS"
+  }
+  ```
+  The user does not have permission to modify this post.
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  ```json
+  {
+    "data": null,
+    "message": "ERR_NO_POST_FOUND"
+  }
+  ```
+  The specified post does not exist.
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  ```json
+  {
+    "data": null,
+    "message": "ERR_NO_REQUESTED_QUERY"
+  }
+  ```
+  Invalid `tab` parameter or action.
+</ResponseField>
+
+## Permissions
+
+- **delete_post**: Only the post author can delete their own posts
+- **delete_post_admin**: Only users with `admin` role can delete any post
+- **change_post**: Only the post author can edit their posts (verified via `byUser` field)
+
+## Source Reference
+
+Implementation: `~/workspace/source/apps/web/src/app/api/data/modify/posts/route.ts:23`

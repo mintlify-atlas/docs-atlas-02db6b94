@@ -1,0 +1,314 @@
+---
+title: Installation Guide
+description: Install Log using Docker and get your self-hosted logging platform running in minutes
+---
+
+# Installing Log
+
+Log is designed to be self-hosted and runs in Docker containers. This guide will walk you through setting up your own instance.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Git** - For cloning the repository
+- **Docker** with Buildx support - For building and running containers
+- **Bun, npm, yarn, pnpm, or deno** - For local development (Bun recommended)
+- **PostgreSQL database** - Either local or hosted (required for production)
+- **S3-compatible storage** - For media file uploads
+
+<Note>
+  This guide assumes you're using Linux. The process is similar on macOS and Windows (with WSL2).
+</Note>
+
+## Quick Start with Docker
+
+<Steps>
+  <Step title="Clone the Repository">
+    Pull the latest version of Log from GitHub:
+
+    ```bash
+    git clone https://github.com/hpware/logs
+    cd logs
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all workspace dependencies using Bun:
+
+    ```bash
+    bun install
+    ```
+
+    <Note>
+      Log uses Bun workspaces to manage the monorepo structure with packages in `apps/*` and `packages/*`.
+    </Note>
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in `apps/web/` based on the example:
+
+    ```bash
+    cp apps/web/.env.example apps/web/.env
+    nano apps/web/.env
+    ```
+
+    See the [Configuration Guide](/configuration) for detailed environment variable setup.
+  </Step>
+
+  <Step title="Build the Docker Image">
+    Build the production Docker image:
+
+    ```bash
+    docker build -t logs-hosting .
+    ```
+
+    The Dockerfile uses a multi-stage build:
+    - **Builder stage**: Installs dependencies and builds the Next.js application
+    - **Production stage**: Creates a minimal image with only runtime dependencies
+  </Step>
+
+  <Step title="Run Database Migrations">
+    Before starting the app, run database migrations:
+
+    ```bash
+    bun run db:migrate
+    ```
+
+    This creates all necessary tables in your PostgreSQL database.
+  </Step>
+
+  <Step title="Start the Container">
+    Run the Docker container:
+
+    ```bash
+    docker run -p 3000:3000 \
+      --env-file apps/web/.env \
+      logs-hosting
+    ```
+
+    The application will be available at `http://localhost:3000`.
+  </Step>
+</Steps>
+
+## Development Setup
+
+For local development without Docker:
+
+<Steps>
+  <Step title="Clone and Install">
+    ```bash
+    git clone https://github.com/hpware/logs
+    cd logs
+    bun install
+    ```
+  </Step>
+
+  <Step title="Setup Environment">
+    Copy the example environment file and configure it:
+
+    ```bash
+    cp apps/web/.env.example apps/web/.env
+    ```
+  </Step>
+
+  <Step title="Run Database Migrations">
+    ```bash
+    bun run db:migrate
+    ```
+  </Step>
+
+  <Step title="Start Development Server">
+    Run all workspace packages in development mode:
+
+    ```bash
+    bun run dev
+    ```
+
+    Or run only the web app:
+
+    ```bash
+    bun run dev:web
+    ```
+
+    The dev server runs on port 3001 with Turbopack enabled for fast refresh.
+  </Step>
+</Steps>
+
+## Understanding the Build Process
+
+The Dockerfile performs a optimized multi-stage build:
+
+```dockerfile
+# Build stage
+FROM oven/bun:latest AS builder
+WORKDIR /app
+COPY . .
+RUN bun install
+RUN bun run build
+
+# Production stage
+FROM oven/bun:latest
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy built application
+COPY --from=builder /app/apps/web/.next ./.next
+COPY --from=builder /app/apps/web/public ./public
+COPY --from=builder /app/apps/web/package.json ./package.json
+COPY --from=builder /app/apps/web/next.config.ts ./next.config.ts
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["bun", "start"]
+```
+
+<Note>
+  The production image disables Next.js telemetry and runs on port 3000 by default. You can override these with environment variables.
+</Note>
+
+## Workspace Scripts
+
+Log provides several npm scripts for managing the monorepo:
+
+<CodeGroup>
+```bash Development
+# Run all packages in dev mode
+bun run dev
+
+# Run only web app
+bun run dev:web
+
+# Run native app (if applicable)
+bun run dev:native
+```
+
+```bash Database
+# Push schema changes (dev)
+bun run db:push
+
+# Generate migrations
+bun run db:generate
+
+# Run migrations (production)
+bun run db:migrate
+
+# Open Drizzle Studio
+bun run db:studio
+```
+
+```bash Build & Deploy
+# Build all packages
+bun run build
+
+# Start production server
+bun run start
+
+# Type checking
+bun run check-types
+```
+</CodeGroup>
+
+## First-Time Setup
+
+When you first access your Log instance:
+
+<Steps>
+  <Step title="Create Admin Account">
+    The first user to register automatically becomes an admin. Navigate to `/login` and create your account.
+
+    <Warning>
+      Make sure to create your admin account first! The authentication system automatically assigns the "admin" role to the first user.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Site Settings">
+    As an admin, navigate to Dashboard → Settings to configure:
+    - Site title
+    - Site description
+    - Copyright owner
+    - robots.txt settings
+  </Step>
+
+  <Step title="Manage Registration">
+    Control whether new users can register via the admin settings. This is stored in the `kvData` table with key `registrationStatus`.
+  </Step>
+</Steps>
+
+## Customizing Authentication
+
+If you need to customize the authentication provider:
+
+<Steps>
+  <Step title="Locate Auth Config">
+    Open the Better-Auth configuration file:
+
+    ```bash
+    nano packages/auth/src/index.ts
+    ```
+  </Step>
+
+  <Step title="Configure Providers">
+    By default, Log uses email/password authentication. You can add OAuth providers by following the [Better-Auth documentation](https://www.better-auth.com/docs/authentication/email-password).
+  </Step>
+
+  <Step title="Update Login Page">
+    Modify the login page to include your authentication links:
+
+    ```bash
+    nano apps/web/src/app/login/client.tsx
+    ```
+  </Step>
+
+  <Step title="Rebuild the Image">
+    After making changes, rebuild your Docker image:
+
+    ```bash
+    docker build -t logs-hosting-custom .
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you encounter database connection errors:
+
+1. Verify your `DATABASE_URL` in the `.env` file
+2. Ensure PostgreSQL is running and accessible
+3. Check that migrations have been run: `bun run db:migrate`
+
+### Build Failures
+
+If the Docker build fails:
+
+1. Ensure you have Docker Buildx installed
+2. Clear Docker cache: `docker builder prune`
+3. Check that all dependencies are available
+
+### Port Conflicts
+
+If port 3000 is already in use:
+
+```bash
+# Use a different port
+docker run -p 8080:3000 \
+  --env-file apps/web/.env \
+  logs-hosting
+```
+
+## Next Steps
+
+Now that Log is installed, proceed to the [Configuration Guide](/configuration) to:
+
+- Set up all required environment variables
+- Configure Better-Auth authentication
+- Set up S3-compatible storage for media files
+- Customize upload limits and CORS settings

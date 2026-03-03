@@ -1,0 +1,365 @@
+---
+title: Storage Configuration
+description: Configure S3-compatible storage for file uploads and media
+---
+
+## Overview
+
+Log uses S3-compatible storage for handling file uploads, images, and videos. The system supports any S3-compatible service including AWS S3, Cloudflare R2, MinIO, and other compatible providers.
+
+## Environment Variables
+
+Configure S3 storage using the following environment variables:
+
+<ParamField path="S3_ACCESS_KEY_ID" type="string" required>
+  Your S3 access key ID for authentication
+</ParamField>
+
+<ParamField path="S3_SECRET_ACCESS_KEY" type="string" required>
+  Your S3 secret access key for authentication
+</ParamField>
+
+<ParamField path="S3_BUCKET_NAME" type="string" required>
+  The name of your S3 bucket where files will be stored
+</ParamField>
+
+<ParamField path="S3_ENDPOINT" type="string">
+  Custom S3 endpoint URL (for S3-compatible services like Cloudflare R2 or MinIO)
+</ParamField>
+
+<ParamField path="S3_REGION" type="string" default="auto">
+  AWS region for your bucket (defaults to "auto" for compatibility)
+</ParamField>
+
+<ParamField path="S3_FORCE_PATH_STYLE" type="boolean" default="false">
+  Force path-style URLs for S3 compatibility (set to "true" for some providers)
+</ParamField>
+
+## S3 Client Configuration
+
+Log uses a lazy-initialized S3 client with automatic configuration validation:
+
+```typescript ~/workspace/source/apps/web/src/lib/s3.ts
+export function getS3Client(): S3Client {
+  if (!isS3Configured()) {
+    throw new Error(
+      "S3 is not configured. Please set S3 environment variables.",
+    );
+  }
+
+  if (!_s3Client) {
+    validateS3Config();
+
+    _s3Client = new S3Client({
+      endpoint: process.env.S3_ENDPOINT,
+      region: process.env.S3_REGION || "auto",
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+      },
+      maxAttempts: 3,
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+    });
+  }
+
+  return _s3Client;
+}
+```
+
+<Info>
+The S3 client is initialized only when first used, and includes automatic retry logic (3 attempts) for resilience.
+</Info>
+
+## Configuration Validation
+
+Log validates S3 configuration before initializing the client:
+
+```typescript ~/workspace/source/apps/web/src/lib/s3.ts
+function validateS3Config() {
+  const required = [
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "S3_BUCKET_NAME",
+  ];
+
+  const missing = required.filter((key) => !process.env[key]);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required S3 environment variables: ${missing.join(", ")}`,
+    );
+  }
+}
+```
+
+<Warning>
+If required environment variables are missing, Log will throw an error when attempting to use S3 features. Ensure all required variables are set before deploying.
+</Warning>
+
+## File Upload System
+
+### File Name Generation
+
+Log generates unique file names with user organization and timestamps:
+
+```typescript ~/workspace/source/apps/web/src/lib/s3.ts
+export function generateFileName(
+  originalName: string,
+  uploadedUser: string,
+): string {
+  // Clean the filename and get extension
+  const cleanName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
+  const extension = cleanName.split(".").pop()?.toLowerCase() || "bin";
+
+  // Validate extension length
+  if (extension.length > 10) {
+    throw new Error("File extension too long");
+  }
+
+  const timestamp = new Date().getTime();
+  const randomId = generateId();
+
+  return `${uploadedUser}/${timestamp}_${randomId}.${extension}`;
+}
+```
+
+<Info>
+Files are organized by user ID, with timestamps and random IDs to prevent collisions. Special characters are sanitized from filenames.
+</Info>
+
+### Presigned Upload URLs
+
+Log uses presigned URLs for secure client-side uploads:
+
+```typescript ~/workspace/source/apps/web/src/lib/s3.ts
+export async function getSignedUploadUrl(key: string, contentType: string) {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not configured. Cannot generate signed upload URL.");
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.S3_BUCKET_NAME!,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  return await getSignedUrl(getS3Client(), command, { expiresIn: 3600 }); // 1 hour
+}
+```
+
+<Info>
+Presigned URLs expire after 1 hour (3600 seconds), providing temporary upload access without exposing credentials.
+</Info>
+
+## Provider-Specific Setup
+
+### AWS S3
+
+<CodeGroup>
+```bash Environment Variables
+S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+S3_BUCKET_NAME=my-log-bucket
+S3_REGION=us-east-1
+```
+
+```bash Setup Steps
+# 1. Create S3 bucket
+aws s3 mb s3://my-log-bucket --region us-east-1
+
+# 2. Create IAM user with S3 permissions
+aws iam create-user --user-name log-s3-user
+
+# 3. Attach S3 policy
+aws iam attach-user-policy --user-name log-s3-user \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+# 4. Create access keys
+aws iam create-access-key --user-name log-s3-user
+```
+</CodeGroup>
+
+### Cloudflare R2
+
+<CodeGroup>
+```bash Environment Variables
+S3_ACCESS_KEY_ID=your_r2_access_key_id
+S3_SECRET_ACCESS_KEY=your_r2_secret_access_key
+S3_BUCKET_NAME=my-log-bucket
+S3_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
+S3_REGION=auto
+```
+
+```bash Setup Steps
+# 1. Create R2 bucket in Cloudflare dashboard
+# 2. Generate R2 API token
+# 3. Copy account ID from R2 dashboard
+# 4. Set endpoint as: https://<account-id>.r2.cloudflarestorage.com
+```
+</CodeGroup>
+
+<Info>
+Cloudflare R2 is S3-compatible and offers zero egress fees, making it cost-effective for serving user-uploaded content.
+</Info>
+
+### MinIO (Self-Hosted)
+
+<CodeGroup>
+```bash Environment Variables
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadmin
+S3_BUCKET_NAME=log-uploads
+S3_ENDPOINT=http://localhost:9000
+S3_REGION=us-east-1
+S3_FORCE_PATH_STYLE=true
+```
+
+```bash Docker Setup
+# Run MinIO in Docker
+docker run -p 9000:9000 -p 9001:9001 \
+  -e "MINIO_ROOT_USER=minioadmin" \
+  -e "MINIO_ROOT_PASSWORD=minioadmin" \
+  quay.io/minio/minio server /data --console-address ":9001"
+
+# Create bucket using MinIO client
+mc alias set myminio http://localhost:9000 minioadmin minioadmin
+mc mb myminio/log-uploads
+mc anonymous set public myminio/log-uploads
+```
+</CodeGroup>
+
+<Warning>
+When using MinIO, set `S3_FORCE_PATH_STYLE=true` to enable path-style URLs required by MinIO.
+</Warning>
+
+## File Organization
+
+Files are organized in the following structure:
+
+```
+bucket-name/
+  ├── user-id-1/
+  │   ├── 1234567890_abc123.jpg
+  │   ├── 1234567891_def456.png
+  │   └── 1234567892_ghi789.mp4
+  ├── user-id-2/
+  │   ├── 1234567893_jkl012.jpg
+  │   └── 1234567894_mno345.pdf
+  └── ...
+```
+
+<Info>
+Each user has their own directory, making it easy to manage storage quotas and delete user data.
+</Info>
+
+## S3 Configuration Object
+
+Access S3 configuration programmatically:
+
+```typescript ~/workspace/source/apps/web/src/lib/s3.ts
+export const s3Config = {
+  get client() {
+    return getS3Client();
+  },
+  get bucket() {
+    if (!isS3Configured()) {
+      throw new Error(
+        "S3 is not configured. Please set S3_BUCKET_NAME environment variable.",
+      );
+    }
+    return process.env.S3_BUCKET_NAME!;
+  },
+  region: process.env.S3_REGION || "us-east-1",
+  endpoint: process.env.S3_ENDPOINT,
+  get isConfigured() {
+    return isS3Configured();
+  },
+};
+```
+
+## Error Handling
+
+The S3 system includes comprehensive error handling:
+
+<CodeGroup>
+```typescript Configuration Check
+function isS3Configured(): boolean {
+  return !!(
+    process.env.S3_ACCESS_KEY_ID &&
+    process.env.S3_SECRET_ACCESS_KEY &&
+    process.env.S3_BUCKET_NAME
+  );
+}
+```
+
+```typescript Error Messages
+// Missing configuration
+"S3 is not configured. Please set S3 environment variables."
+
+// Missing specific variables
+"Missing required S3 environment variables: S3_ACCESS_KEY_ID, S3_BUCKET_NAME"
+
+// Invalid filename
+"Invalid original filename provided"
+
+// Extension too long
+"File extension too long"
+```
+</CodeGroup>
+
+## Security Best Practices
+
+<Steps>
+  <Step title="Use IAM Roles (AWS)">
+    Create dedicated IAM users with minimal permissions (only S3 access for the specific bucket).
+  </Step>
+  
+  <Step title="Enable CORS">
+    Configure CORS on your S3 bucket to allow uploads from your domain:
+    ```json
+    {
+      "AllowedOrigins": ["https://your-domain.com"],
+      "AllowedMethods": ["PUT", "POST"],
+      "AllowedHeaders": ["*"],
+      "MaxAgeSeconds": 3000
+    }
+    ```
+  </Step>
+  
+  <Step title="Set Bucket Policies">
+    Configure bucket policies to control public access and enforce HTTPS.
+  </Step>
+  
+  <Step title="Use Private Buckets">
+    Keep buckets private and serve files through your application or CDN with signed URLs.
+  </Step>
+  
+  <Step title="Enable Versioning">
+    Enable bucket versioning to prevent accidental deletion and maintain file history.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="S3 client initialization fails">
+    **Solution:** Verify all required environment variables are set:
+    ```bash
+    echo $S3_ACCESS_KEY_ID
+    echo $S3_SECRET_ACCESS_KEY
+    echo $S3_BUCKET_NAME
+    ```
+  </Accordion>
+  
+  <Accordion title="Upload fails with 403 Forbidden">
+    **Solution:** Check that your IAM user has `PutObject` permissions on the bucket.
+  </Accordion>
+  
+  <Accordion title="MinIO connection refused">
+    **Solution:** Ensure `S3_FORCE_PATH_STYLE=true` is set for MinIO compatibility.
+  </Accordion>
+  
+  <Accordion title="Presigned URL expires immediately">
+    **Solution:** Check that your server's system time is synchronized (NTP). AWS requires accurate timestamps.
+  </Accordion>
+</AccordionGroup>

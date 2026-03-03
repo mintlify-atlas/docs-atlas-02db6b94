@@ -1,0 +1,549 @@
+---
+title: Database Setup
+description: Set up PostgreSQL and manage database migrations with Drizzle ORM
+---
+
+Log uses PostgreSQL as its database with Drizzle ORM for schema management and migrations. This guide covers database setup, migrations, and schema management.
+
+## Database Requirements
+
+- PostgreSQL 14 or higher
+- Database with full read/write permissions
+- SSL support for production deployments
+
+## Quick Start
+
+<Steps>
+  <Step title="Create a PostgreSQL database">
+    ```sql
+    CREATE DATABASE logs;
+    CREATE USER logs_user WITH PASSWORD 'your_secure_password';
+    GRANT ALL PRIVILEGES ON DATABASE logs TO logs_user;
+    ```
+  </Step>
+
+  <Step title="Set DATABASE_URL environment variable">
+    ```bash
+    DATABASE_URL="postgresql://logs_user:your_secure_password@localhost:5432/logs"
+    ```
+  </Step>
+
+  <Step title="Run migrations">
+    ```bash
+    bun run db:migrate
+    ```
+  </Step>
+</Steps>
+
+## Drizzle ORM Configuration
+
+Log uses Drizzle Kit for database migrations. The configuration is in `packages/db/drizzle.config.ts`:
+
+```typescript
+import { defineConfig } from "drizzle-kit";
+import dotenv from "dotenv";
+
+dotenv.config({
+  path: "../../apps/web/.env",
+});
+
+export default defineConfig({
+  schema: "./src/schema",
+  out: "./src/migrations",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL || "",
+  },
+});
+```
+
+## Database Scripts
+
+The database package (`packages/db/package.json`) provides several scripts:
+
+<CodeGroup>
+  ```bash Generate Migration
+  bun run db:generate
+  ```
+
+  ```bash Push Schema
+  bun run db:push
+  ```
+
+  ```bash Run Migrations
+  bun run db:migrate
+  ```
+
+  ```bash Open Studio
+  bun run db:studio
+  ```
+</CodeGroup>
+
+### Script Descriptions
+
+<AccordionGroup>
+  <Accordion title="db:generate" icon="wand-magic-sparkles">
+    Generates new migration files based on schema changes.
+
+    ```bash
+    bun run db:generate
+    ```
+
+    This compares your schema files with the current database state and creates SQL migration files in `packages/db/src/migrations/`.
+  </Accordion>
+
+  <Accordion title="db:push" icon="upload">
+    Pushes schema changes directly to the database without generating migrations.
+
+    ```bash
+    bun run db:push
+    ```
+
+    <Warning>
+      This is useful for development but not recommended for production. Use migrations for production.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="db:migrate" icon="database">
+    Runs pending migrations against the database.
+
+    ```bash
+    bun run db:migrate
+    ```
+
+    This is automatically run on application startup via the `start` script.
+  </Accordion>
+
+  <Accordion title="db:studio" icon="window">
+    Opens Drizzle Studio for visual database management.
+
+    ```bash
+    bun run db:studio
+    ```
+
+    Access at `https://local.drizzle.studio`
+  </Accordion>
+</AccordionGroup>
+
+## Database Schema
+
+The database schema is split into two main parts:
+
+### Authentication Schema
+
+Located in `packages/db/src/schema/auth.ts`, this handles Better Auth tables:
+
+```typescript
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  image: text("image"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
+});
+
+export const session = pgTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expires_at").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  impersonatedBy: text("impersonated_by"),
+});
+
+export const account = pgTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+export const verification = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+```
+
+### Application Schema
+
+Located in `packages/db/src/schema/main.ts`, this handles application-specific tables:
+
+```typescript
+export const userPosts = pgTable(
+  "user_posts",
+  {
+    postId: text("post_id").primaryKey(),
+    type: text("type").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    byUser: text("by_user").notNull().references(() => user.id),
+    textData: text("text_data"),
+    imageUrl: text("image_url"),
+    videoUrl: text("video_url"),
+    status: text("status").notNull().default("draft"),
+    tags: jsonb("tags").default([]),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    check("type_check", sql`${table.type} IN ('photos', 'text', 'video')`),
+    check("checkcorrectstatus", sql`${table.status} IN ('draft', 'private', 'public', 'unlisted')`),
+    check("image_url_check", sql`${table.type} != 'photos' OR ${table.imageUrl} IS NOT NULL`),
+    check("video_url_check", sql`${table.type} != 'video' OR ${table.videoUrl} IS NOT NULL`),
+    index("title_search_index").using("gin", sql`to_tsvector('english', ${table.textData})`),
+  ],
+);
+
+export const kvData = pgTable("kv_data", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  key: text("key").notNull().unique(),
+  value: jsonb("value").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const urlShorter = pgTable("url_shorter", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  urlSlug: text("url_slug").notNull().unique(),
+  targetUrl: text("target_url").notNull(),
+  byUser: text("by_user").notNull().references(() => user.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const collections = pgTable("collections", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  collectionId: text("collection_id").notNull().unique(),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  items: jsonb("items").notNull().default({}),
+  byUser: text("by_user").notNull().references(() => user.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+```
+
+### Key Features
+
+<CardGroup cols={2}>
+  <Card title="Full-text Search" icon="magnifying-glass">
+    PostgreSQL GIN index on `textData` for efficient full-text search:
+    ```sql
+    to_tsvector('english', text_data)
+    ```
+  </Card>
+
+  <Card title="Type Safety" icon="shield-check">
+    Check constraints ensure data integrity:
+    - Post types: `photos`, `text`, `video`
+    - Post status: `draft`, `private`, `public`, `unlisted`
+  </Card>
+
+  <Card title="JSONB Storage" icon="brackets-curly">
+    Flexible storage for tags, collections, and KV data using PostgreSQL's JSONB type.
+  </Card>
+
+  <Card title="Cascade Deletes" icon="trash">
+    User deletion automatically removes sessions and accounts via foreign key cascades.
+  </Card>
+</CardGroup>
+
+## Migrations
+
+Log includes 15 migrations (0000 through 0014) in `packages/db/src/migrations/`. The initial migration creates the core schema:
+
+<Accordion title="Initial Migration (0000_spooky_crystal.sql)">
+  Creates the foundation tables:
+  - `user` - User accounts
+  - `session` - User sessions
+  - `account` - OAuth accounts
+  - `verification` - Email verification
+  - `user_posts` - User posts/logs
+
+  ```sql
+  CREATE TABLE "user" (
+    "id" text PRIMARY KEY NOT NULL,
+    "name" text NOT NULL,
+    "email" text NOT NULL,
+    "email_verified" boolean NOT NULL,
+    "image" text,
+    "created_at" timestamp NOT NULL,
+    "updated_at" timestamp NOT NULL,
+    CONSTRAINT "user_email_unique" UNIQUE("email")
+  );
+  ```
+</Accordion>
+
+### Migration Workflow
+
+<Steps>
+  <Step title="Modify schema files">
+    Edit `packages/db/src/schema/main.ts` or `packages/db/src/schema/auth.ts`:
+
+    ```typescript
+    export const myNewTable = pgTable("my_new_table", {
+      id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+      name: text("name").notNull(),
+      createdAt: timestamp("created_at").defaultNow(),
+    });
+    ```
+  </Step>
+
+  <Step title="Generate migration">
+    ```bash
+    bun run db:generate
+    ```
+
+    This creates a new SQL file in `packages/db/src/migrations/` with a generated name like `0015_quirky_hero.sql`.
+  </Step>
+
+  <Step title="Review the migration">
+    Check the generated SQL to ensure it matches your intent:
+
+    ```sql
+    CREATE TABLE "my_new_table" (
+      "id" integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+      "name" text NOT NULL,
+      "created_at" timestamp
+    );
+    ```
+  </Step>
+
+  <Step title="Run the migration">
+    ```bash
+    bun run db:migrate
+    ```
+
+    Or restart the application (migrations run automatically on startup).
+  </Step>
+</Steps>
+
+## Database Connection
+
+The database connection is initialized in `packages/db/src/index.ts`:
+
+```typescript
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as main_schema from "./schema/main";
+import * as schema2 from "./schema/auth";
+
+export const db = drizzle(process.env.DATABASE_URL || "", {
+  schema: { ...main_schema, ...schema2 },
+});
+
+export * as dorm from "drizzle-orm";
+export * as main_schema from "./schema/main";
+export * as auth_schema from "./schema/auth";
+```
+
+### Connection Pooling
+
+Drizzle uses the PostgreSQL driver's default connection pooling. For production, consider:
+
+- Connection pool size based on your workload
+- Connection timeout settings
+- SSL/TLS for remote connections
+
+## Production Considerations
+
+<AccordionGroup>
+  <Accordion title="Backups" icon="floppy-disk">
+    Set up regular database backups:
+
+    ```bash
+    # Backup
+    pg_dump -h localhost -U logs_user logs > backup_$(date +%Y%m%d).sql
+
+    # Restore
+    psql -h localhost -U logs_user logs < backup_20260303.sql
+    ```
+
+    Consider automated backup solutions:
+    - AWS RDS automated backups
+    - Neon automatic backups
+    - Supabase point-in-time recovery
+    - Custom backup scripts with cron
+  </Accordion>
+
+  <Accordion title="Performance" icon="gauge-high">
+    Optimize database performance:
+
+    1. **Indexes**: Full-text search index is already configured on `text_data`
+    2. **Connection pooling**: Use PgBouncer for high-traffic deployments
+    3. **Query optimization**: Use Drizzle's query builder for efficient queries
+    4. **Monitoring**: Set up query performance monitoring
+
+    ```typescript
+    // Efficient query with Drizzle
+    const posts = await db
+      .select()
+      .from(userPosts)
+      .where(eq(userPosts.byUser, userId))
+      .orderBy(desc(userPosts.createdAt))
+      .limit(20);
+    ```
+  </Accordion>
+
+  <Accordion title="Security" icon="lock">
+    Database security best practices:
+
+    - Use SSL/TLS for connections in production
+    - Restrict database access to application servers only
+    - Use strong passwords or IAM authentication
+    - Regular security updates for PostgreSQL
+    - Enable audit logging for compliance
+
+    ```bash
+    # Force SSL connection
+    DATABASE_URL="postgresql://user:pass@host:5432/logs?sslmode=require"
+    ```
+  </Accordion>
+
+  <Accordion title="Monitoring" icon="chart-line">
+    Monitor database health:
+
+    - Query performance and slow queries
+    - Connection count and pool utilization
+    - Database size and growth rate
+    - Replication lag (if using replicas)
+
+    Tools:
+    - Drizzle Studio for visual inspection
+    - pgAdmin for administration
+    - Cloud provider monitoring (AWS CloudWatch, etc.)
+    - Custom Prometheus exporters
+  </Accordion>
+</AccordionGroup>
+
+## Managed PostgreSQL Providers
+
+Log works with any PostgreSQL 14+ database. Here are some popular options:
+
+<CardGroup cols={2}>
+  <Card title="Neon" icon="bolt" href="https://neon.tech">
+    Serverless Postgres with branching and autoscaling.
+
+    ```bash
+    DATABASE_URL="postgresql://user:pass@ep-cool-forest-123456.us-east-2.aws.neon.tech/logs?sslmode=require"
+    ```
+  </Card>
+
+  <Card title="Supabase" icon="database" href="https://supabase.com">
+    Open source Firebase alternative with Postgres.
+
+    ```bash
+    DATABASE_URL="postgresql://postgres:pass@db.project.supabase.co:5432/postgres"
+    ```
+  </Card>
+
+  <Card title="Railway" icon="train" href="https://railway.app">
+    Deploy Postgres in seconds with automatic backups.
+
+    ```bash
+    DATABASE_URL="postgresql://postgres:pass@containers.railway.app:5432/railway"
+    ```
+  </Card>
+
+  <Card title="AWS RDS" icon="aws" href="https://aws.amazon.com/rds/postgresql/">
+    Managed PostgreSQL with automated backups and scaling.
+
+    ```bash
+    DATABASE_URL="postgresql://admin:pass@database.region.rds.amazonaws.com:5432/logs"
+    ```
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused">
+    If you can't connect to the database:
+
+    1. Check PostgreSQL is running: `pg_isready`
+    2. Verify DATABASE_URL is correct
+    3. Check firewall rules allow connections
+    4. Verify database user has proper permissions
+    5. Check SSL mode matches server configuration
+  </Accordion>
+
+  <Accordion title="Migration failures">
+    If migrations fail:
+
+    1. Check database logs for error details
+    2. Verify schema changes are valid SQL
+    3. Ensure database user has DDL permissions
+    4. Check for conflicting migrations
+    5. Manually rollback if needed and regenerate
+  </Accordion>
+
+  <Accordion title="Permission errors">
+    If you see permission denied errors:
+
+    ```sql
+    -- Grant all privileges
+    GRANT ALL PRIVILEGES ON DATABASE logs TO logs_user;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO logs_user;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO logs_user;
+    ```
+  </Accordion>
+
+  <Accordion title="Slow queries">
+    If queries are slow:
+
+    1. Check if indexes are being used: `EXPLAIN ANALYZE`
+    2. Review query plans in Drizzle Studio
+    3. Consider adding indexes for frequently queried columns
+    4. Monitor database resource usage
+    5. Optimize JSONB queries with GIN indexes
+  </Accordion>
+</AccordionGroup>
+
+## Drizzle Studio
+
+Visually inspect and manage your database with Drizzle Studio:
+
+```bash
+bun run db:studio
+```
+
+Access at `https://local.drizzle.studio`
+
+<Info>
+Drizzle Studio provides a visual interface to:
+- Browse tables and data
+- Run queries
+- View relationships
+- Edit records
+- Monitor performance
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/deployment/environment-variables">
+    Configure DATABASE_URL and other variables
+  </Card>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Deploy with automatic migrations
+  </Card>
+</CardGroup>

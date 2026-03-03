@@ -1,0 +1,210 @@
+---
+title: 'Users API'
+description: 'Retrieve and manage user information'
+---
+
+## Get User Basic Info
+
+<RequestExample>
+```bash cURL
+curl -X GET https://your-domain.com/api/data/get_user_basic_info/user_xyz789
+```
+
+```javascript JavaScript
+const userId = 'user_xyz789';
+const response = await fetch(`/api/data/get_user_basic_info/${userId}`);
+const data = await response.json();
+```
+</RequestExample>
+
+Retrieves basic public information about a user by their ID.
+
+### URL Parameters
+
+<ParamField path="slug" type="string" required>
+  The user ID to retrieve information for
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates whether the request was successful
+</ResponseField>
+
+<ResponseField name="msg" type="string">
+  Error message if request fails, empty string on success
+</ResponseField>
+
+<ResponseField name="content" type="object">
+  User information object
+  
+  <Expandable title="User Object">
+    <ResponseField name="id" type="string">
+      Unique user identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's display name
+    </ResponseField>
+    
+    <ResponseField name="image" type="string | null">
+      URL to user's profile image
+    </ResponseField>
+    
+    <ResponseField name="banned" type="boolean">
+      Whether the user is currently banned
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Examples
+
+```json Success Response
+{
+  "success": true,
+  "msg": "",
+  "content": {
+    "id": "user_xyz789",
+    "name": "John Doe",
+    "image": "https://example.com/avatar.jpg",
+    "banned": false
+  }
+}
+```
+
+```json Error Response - User Not Found
+{
+  "success": false,
+  "msg": "ERR_USER_NOT_FOUND",
+  "content": {
+    "id": null,
+    "name": null,
+    "image": null,
+    "banned": false
+  }
+}
+```
+
+### Error Codes
+
+<ResponseField name="ERR_USER_NOT_FOUND" type="error">
+  The specified user ID does not exist in the database
+</ResponseField>
+
+## Update Profile Picture
+
+<RequestExample>
+```bash cURL
+curl -X POST 'https://your-domain.com/api/data/settings?tab=non_admin_user' \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "profile_pic_update",
+    "imageUrl": "https://example.com/new-avatar.jpg"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/data/settings?tab=non_admin_user', {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    action: 'profile_pic_update',
+    imageUrl: 'https://example.com/new-avatar.jpg'
+  })
+});
+const data = await response.json();
+```
+</RequestExample>
+
+Updates the authenticated user's profile picture.
+
+### Authentication
+
+Requires a valid session token. Returns 401 if not authenticated.
+
+### Query Parameters
+
+<ParamField query="tab" type="string" required>
+  Must be set to `non_admin_user`
+</ParamField>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Must be set to `profile_pic_update`
+</ParamField>
+
+<ParamField body="imageUrl" type="string" required>
+  URL of the new profile image
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates whether the update was successful
+</ResponseField>
+
+<ResponseField name="msg" type="string">
+  Success or error message
+</ResponseField>
+
+### Response Examples
+
+```json Success Response
+{
+  "success": true,
+  "msg": "Profile picture updated successfully"
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "msg": "ERR_INCORRECT_PARAMSs"
+}
+```
+
+### Error Codes
+
+<ResponseField name="400" type="error">
+  **Bad Request**
+  - Missing or invalid `imageUrl` parameter
+</ResponseField>
+
+<ResponseField name="401" type="error">
+  **Unauthorized**
+  - Invalid session token
+  - User not logged in
+</ResponseField>
+
+## User Database Schema
+
+Users are stored in the `auth_schema.user` table with the following fields:
+
+<ParamField path="id" type="string" required>
+  Unique user identifier (primary key)
+</ParamField>
+
+<ParamField path="name" type="string">
+  User's display name
+</ParamField>
+
+<ParamField path="image" type="string | null">
+  Profile image URL
+</ParamField>
+
+<ParamField path="banned" type="boolean">
+  Ban status of the user
+</ParamField>
+
+<ParamField path="role" type="string">
+  User role (e.g., `admin`, `user`)
+</ParamField>
+
+<Note>
+  The Users API only returns basic public information. Sensitive fields like email, password, and authentication details are never exposed through these endpoints.
+</Note>

@@ -1,0 +1,306 @@
+---
+title: Collections
+description: Organize and group your posts into curated collections
+---
+
+## Overview
+
+Collections allow users to organize their posts into themed groups or curated sets. Think of collections as albums, portfolios, or topical groupings that help structure your content.
+
+## What are Collections?
+
+Collections provide a way to:
+
+- Group related posts together
+- Create themed albums or portfolios
+- Organize content by topic, project, or category
+- Build curated sets of your best content
+
+<Card title="Use Cases" icon="lightbulb">
+  Collections are perfect for photographers creating portfolios, bloggers organizing series, or anyone wanting to showcase related content in a structured way.
+</Card>
+
+## Database Schema
+
+Collections are stored in the `collections` table:
+
+```typescript
+{
+  id: number,                // Auto-incrementing primary key
+  collectionId: string,      // Unique collection identifier
+  title: string,             // Collection name
+  slug: string,              // URL-friendly identifier (unique)
+  items: object,             // JSON object containing post references
+  byUser: string,            // User ID reference
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### Schema Details
+
+<ParamField path="collectionId" type="string" required>
+  Unique identifier for the collection, used for internal references
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Human-readable name displayed to users
+</ParamField>
+
+<ParamField path="slug" type="string" required>
+  URL-safe identifier used in collection URLs (must be unique)
+</ParamField>
+
+<ParamField path="items" type="object" default="{}">
+  JSON object storing references to posts within the collection
+</ParamField>
+
+## Creating Collections
+
+### User Interface
+
+Users can create collections through the dashboard:
+
+1. **Navigate to Collections**: Go to `/dashboard/collections`
+2. **Create New**: Click to `/dashboard/collections/create`
+3. **Enter Details**: Provide collection title and slug
+4. **Save**: Submit to create the collection
+
+<Info>
+  The collections creation UI is currently under development. The database schema and API infrastructure are in place.
+</Info>
+
+## Managing Collections
+
+### Retrieving All Collections
+
+Users can fetch their collections via the API:
+
+```typescript
+// GET /api/data/get_all_collections
+// Response
+{
+  "data": [
+    {
+      "collectionId": "...",
+      "slug": "summer-photos",
+      "title": "Summer 2024"
+    }
+  ],
+  "message": ""
+}
+```
+
+<CodeGroup>
+```typescript Fetch Collections
+const response = await fetch("/api/data/get_all_collections", {
+  method: "GET"
+});
+
+const { data } = await response.json();
+console.log(data); // Array of collection objects
+```
+
+```typescript React Hook Example
+import { useQuery } from "@tanstack/react-query";
+
+const { data: collections } = useQuery({
+  queryKey: ["getAllCollections"],
+  queryFn: async () => {
+    const req = await fetch("/api/data/get_all_collections");
+    const res = await req.json();
+    return res.data || [];
+  }
+});
+```
+</CodeGroup>
+
+### Authentication Requirements
+
+The collections API requires authentication:
+
+- Users must have a valid session
+- Only the collection owner's collections are returned
+- Returns 401 error if not logged in
+
+<Warning>
+  The API returns `ERR_NOT_LOGGED_IN` if accessed without authentication.
+</Warning>
+
+## Adding Posts to Collections
+
+### During Post Creation
+
+When creating a post, users can assign it to a collection:
+
+1. **Select Collection**: Choose from dropdown menu in the create post form
+2. **Refresh List**: Click refresh icon to update available collections
+3. **Submit**: Post is created and associated with the collection
+
+### Collection Selector Component
+
+The post creation interface includes a collection selector:
+
+```tsx
+<Select>
+  <SelectTrigger className="w-[180px]">
+    <SelectValue placeholder="Select" />
+  </SelectTrigger>
+  <SelectContent>
+    {collections?.map((collection) => (
+      <SelectItem key={collection.id} value={collection.id}>
+        {collection.name}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+```
+
+<Tip>
+  Collections are loaded dynamically when creating posts, ensuring you always see your latest collections.
+</Tip>
+
+## Collection Structure
+
+### Items Field
+
+The `items` field is a JSONB column that stores post references:
+
+```json
+{
+  "posts": [
+    "_ITM1a2b3c4d5e6f7g8h9i0j",
+    "_ITM2b3c4d5e6f7g8h9i0j1k"
+  ],
+  "order": [0, 1],
+  "metadata": {
+    "featured": "_ITM1a2b3c4d5e6f7g8h9i0j"
+  }
+}
+```
+
+This flexible structure allows for:
+
+- Post ordering and arrangement
+- Featured item designation
+- Future extensibility for additional metadata
+
+## URL Structure
+
+Collections are accessed via their slug:
+
+```
+https://yourinstance.com/collections/[slug]
+```
+
+<Card title="Example URLs">
+  - `/collections/summer-photos`
+  - `/collections/travel-2024`
+  - `/collections/portfolio`
+</Card>
+
+## Permissions & Access Control
+
+### Owner Permissions
+
+Collection owners can:
+
+- View all their collections
+- Edit collection details
+- Add or remove posts
+- Delete collections
+
+### Public Access
+
+Public visibility for collections follows the same pattern as posts:
+
+- Collections can have public/private status
+- Public collections display public posts only
+- Private posts remain hidden even in public collections
+
+<Note>
+  Collection visibility settings are planned for future implementation.
+</Note>
+
+## Integration with Posts
+
+Collections integrate seamlessly with the post system:
+
+<Steps>
+  <Step title="Create Collection">
+    Set up a new collection with a title and slug
+  </Step>
+  <Step title="Add Posts">
+    Assign posts to the collection during creation or editing
+  </Step>
+  <Step title="View Collection">
+    Access the collection page to see all grouped posts
+  </Step>
+  <Step title="Manage Items">
+    Reorder, feature, or remove posts from the collection
+  </Step>
+</Steps>
+
+## Future Enhancements
+
+Planned features for collections include:
+
+<CardGroup cols={2}>
+  <Card title="Collection Templates" icon="palette">
+    Pre-designed layouts for different collection types
+  </Card>
+  <Card title="Collaboration" icon="users">
+    Allow multiple users to contribute to shared collections
+  </Card>
+  <Card title="Advanced Ordering" icon="arrows-up-down">
+    Drag-and-drop reordering and custom sort options
+  </Card>
+  <Card title="Collection Themes" icon="paintbrush">
+    Custom styling and presentation options
+  </Card>
+</CardGroup>
+
+## API Reference
+
+### Get All Collections
+
+<ResponseField name="GET /api/data/get_all_collections" type="endpoint">
+  Retrieves all collections for the authenticated user.
+
+  **Authentication**: Required
+
+  **Response**:
+  ```json
+  {
+    "data": [
+      {
+        "collectionId": "string",
+        "slug": "string",
+        "title": "string"
+      }
+    ],
+    "message": "string"
+  }
+  ```
+
+  **Error Codes**:
+  - `401`: Not logged in (`ERR_NOT_LOGGED_IN`)
+  - `500`: Server error
+</ResponseField>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Titles">
+    Choose clear, descriptive names that communicate the collection's theme or purpose
+  </Accordion>
+  <Accordion title="Keep Slugs Simple">
+    Use lowercase, hyphen-separated slugs for clean URLs (e.g., `summer-2024` instead of `Summer_Photos_2024`)
+  </Accordion>
+  <Accordion title="Organize Strategically">
+    Group posts by meaningful categories that make sense for your content and audience
+  </Accordion>
+  <Accordion title="Regular Curation">
+    Periodically review and update collections to ensure they remain relevant and high-quality
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,94 @@
+---
+title: Posts API Overview
+description: Manage posts including photos, text, and video content with various visibility statuses
+---
+
+The Posts API allows you to create, retrieve, modify, and publish posts on Log. Posts can contain text, photos, or videos and support different visibility statuses.
+
+## Post Types
+
+Log supports three types of posts:
+
+- **photos** - Posts containing images (JPEG, PNG, GIF, WebP)
+- **text** - Text-only posts
+- **video** - Posts containing videos (MP4, WebM, QuickTime)
+
+## Post Status
+
+Each post has a status that controls its visibility:
+
+- **draft** - Post is saved but not visible to others (default)
+- **private** - Post is only visible to the author
+- **public** - Post is visible to everyone
+- **unlisted** - Post is accessible via direct link but not listed publicly
+
+## Post Schema
+
+All posts contain the following fields:
+
+<ResponseField name="postId" type="string" required>
+  Unique identifier for the post (format: `_ITM` followed by 20 alphanumeric characters)
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Type of post: `photos`, `text`, or `video`
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Visibility status: `draft`, `private`, `public`, or `unlisted` (default: `draft`)
+</ResponseField>
+
+<ResponseField name="byUser" type="string" required>
+  User ID of the post author
+</ResponseField>
+
+<ResponseField name="textData" type="string | null">
+  Text content of the post
+</ResponseField>
+
+<ResponseField name="imageUrl" type="string | null">
+  URL of the image (required when type is `photos`)
+</ResponseField>
+
+<ResponseField name="videoUrl" type="string | null">
+  URL of the video (required when type is `video`)
+</ResponseField>
+
+<ResponseField name="tags" type="array">
+  Tags associated with the post (default: `[]`)
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp" required>
+  When the post was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp" required>
+  When the post was last updated
+</ResponseField>
+
+## Available Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create Post" icon="plus" href="/api/posts/create">
+    Create a new post with text, photo, or video content
+  </Card>
+  
+  <Card title="Modify Post" icon="pen" href="/api/posts/modify">
+    Update or delete existing posts
+  </Card>
+  
+  <Card title="Publish Files" icon="upload" href="/api/posts/publish">
+    Upload images and videos for posts
+  </Card>
+</CardGroup>
+
+## Authentication
+
+All Posts API endpoints require authentication. Include your session token in the request headers.
+
+## Rate Limits
+
+File uploads are subject to size limits:
+- Default maximum file size: 50MB (configurable via `NEXT_PUBLIC_UPLOAD_LIMIT`)
+- Supported image formats: JPEG, PNG, GIF, WebP
+- Supported video formats: MP4, WebM, QuickTime
