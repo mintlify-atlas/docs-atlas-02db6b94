@@ -1,0 +1,118 @@
+{
+  "projectType": "saas",
+  "projectName": "Log",
+  "projectDescription": "A self-hosted platform for logging development updates and capturing personal memories with photos, videos, and text.",
+  "theme": "almond",
+  "primaryColor": "#8B5CF6",
+  "lightColor": "#C4B5FD",
+  "darkColor": "#6D28D9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/posts",
+              "features/collections",
+              "features/url-shortening",
+              "features/search"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/user-management",
+              "admin/settings",
+              "admin/storage"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/environment-variables",
+              "deployment/database"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Posts",
+            "pages": [
+              "api/posts/overview",
+              "api/posts/create",
+              "api/posts/modify",
+              "api/posts/publish"
+            ]
+          },
+          {
+            "group": "Collections",
+            "pages": [
+              "api/collections"
+            ]
+          },
+          {
+            "group": "Files",
+            "pages": [
+              "api/files"
+            ]
+          },
+          {
+            "group": "Users",
+            "pages": [
+              "api/users"
+            ]
+          },
+          {
+            "group": "Settings",
+            "pages": [
+              "api/settings"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-format posts (photos, text, video)",
+    "Content collections for organizing posts",
+    "Built-in URL shortening",
+    "Full-text search with PostgreSQL",
+    "User authentication with admin controls",
+    "S3-compatible file storage",
+    "Flexible content visibility (public, private, draft, unlisted)",
+    "Self-hosted and Docker-ready"
+  ],
+  "publicApiSurface": [
+    "POST /api/data/all_posts - Get all posts",
+    "POST /api/data/modify/posts - Create or modify posts",
+    "POST /api/data/publish - Publish posts",
+    "POST /api/data/publish/file - Publish files",
+    "POST /api/data/get_all_collections - Get collections",
+    "POST /api/data/create_share_link - Create short URLs",
+    "POST /api/data/search - Search posts",
+    "GET /api/data/get_user_basic_info/[slug] - Get user info",
+    "POST /api/data/settings - Manage settings",
+    "GET /api/data/files/[...slug] - Access files",
+    "POST /api/auth/[...all] - Authentication endpoints"
+  ]
+}
