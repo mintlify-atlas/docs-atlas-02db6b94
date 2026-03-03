@@ -1,0 +1,239 @@
+---
+title: System Information
+description: Retrieve public instance information and feature status
+---
+
+## Endpoint
+
+```
+GET /api/data/system_info
+```
+
+Retrieves public information about the Log instance, including copyright owner, feature toggles, and version information.
+
+## Authentication
+
+**Not required** - This is a public endpoint accessible to all users.
+
+## Response
+
+<ResponseField name="copyright_owner" type="string">
+  The name of the instance owner (from `copyrightOwner` KV setting)
+</ResponseField>
+
+<ResponseField name="feature_status" type="object">
+  Object containing feature toggle states
+  
+  <Expandable title="properties">
+    <ResponseField name="homePage" type="boolean">
+      Whether the public homepage/feed is enabled
+    </ResponseField>
+    
+    <ResponseField name="search" type="boolean">
+      Whether the search functionality is enabled
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="optionalExposeVersion" type="boolean | string">
+  Whether version information should be exposed
+</ResponseField>
+
+<ResponseField name="version" type="string | null">
+  Application version if `optionalExposeVersion` is not `"false"`, otherwise `null`
+</ResponseField>
+
+## Example Request
+
+<CodeGroup>
+```javascript JavaScript
+const response = await fetch('/api/data/system_info');
+const systemInfo = await response.json();
+
+console.log(`Instance owned by: ${systemInfo.copyright_owner}`);
+console.log(`Homepage enabled: ${systemInfo.feature_status.homePage}`);
+console.log(`Version: ${systemInfo.version || 'Hidden'}`);
+```
+
+```bash cURL
+curl "https://yourinstance.com/api/data/system_info"
+```
+
+```python Python
+import requests
+
+response = requests.get('https://yourinstance.com/api/data/system_info')
+data = response.json()
+
+print(f"Copyright owner: {data['copyright_owner']}")
+print(f"Features: {data['feature_status']}")
+print(f"Version: {data.get('version', 'Hidden')}")
+```
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "copyright_owner": "Instance Owner Name",
+  "feature_status": {
+    "homePage": true,
+    "search": true
+  },
+  "optionalExposeVersion": true,
+  "version": "0.1.14"
+}
+```
+
+## Source Code Reference
+
+From `~/workspace/source/apps/web/src/app/api/data/system_info/route.ts:9-35`:
+
+```typescript
+export const GET = async (request: NextRequest) => {
+  const getHomePageStatus = await db
+    .select()
+    .from(main_schema.kvData)
+    .where(dorm.eq(main_schema.kvData.key, "homePageStatus"));
+  
+  const getSearchPageStatus = await db
+    .select()
+    .from(main_schema.kvData)
+    .where(dorm.eq(main_schema.kvData.key, "searchStatus"));
+  
+  const getCopyrightOwner = await db
+    .select()
+    .from(main_schema.kvData)
+    .where(dorm.eq(main_schema.kvData.key, "copyrightOwner"));
+  
+  const exposeVersion = await db
+    .select()
+    .from(main_schema.kvData)
+    .where(dorm.eq(main_schema.kvData.key, "exposeVersion"));
+  
+  return Response.json({
+    copyright_owner: getCopyrightOwner[0].value,
+    feature_status: {
+      homePage: getHomePageStatus[0].value,
+      search: getSearchPageStatus[0].value,
+    },
+    optionalExposeVersion: exposeVersion[0].value,
+    version: exposeVersion[0].value !== "false" ? projectData.version : null,
+  });
+};
+```
+
+## Use Cases
+
+### Feature Detection
+
+Use this endpoint to determine which features are available before making other API calls:
+
+```javascript
+async function checkFeatureAvailability() {
+  const systemInfo = await fetch('/api/data/system_info').then(r => r.json());
+  
+  if (!systemInfo.feature_status.homePage) {
+    console.log('Public feed is disabled');
+    // Hide homepage UI
+  }
+  
+  if (!systemInfo.feature_status.search) {
+    console.log('Search is disabled');
+    // Hide search bar
+  }
+}
+```
+
+### About Page
+
+Display instance information on an "About" page:
+
+```javascript
+async function renderAboutPage() {
+  const info = await fetch('/api/data/system_info').then(r => r.json());
+  
+  return `
+    <h1>About This Instance</h1>
+    <p>Operated by: ${info.copyright_owner}</p>
+    ${info.version ? `<p>Version: ${info.version}</p>` : ''}
+    <ul>
+      <li>Public Feed: ${info.feature_status.homePage ? 'Enabled' : 'Disabled'}</li>
+      <li>Search: ${info.feature_status.search ? 'Enabled' : 'Disabled'}</li>
+    </ul>
+  `;
+}
+```
+
+### Client-Side Configuration
+
+Configure your app based on instance capabilities:
+
+```javascript
+class LogClient {
+  constructor(baseUrl) {
+    this.baseUrl = baseUrl;
+    this.config = null;
+  }
+  
+  async initialize() {
+    const response = await fetch(`${this.baseUrl}/api/data/system_info`);
+    this.config = await response.json();
+  }
+  
+  isHomePageEnabled() {
+    return this.config?.feature_status?.homePage ?? false;
+  }
+  
+  isSearchEnabled() {
+    return this.config?.feature_status?.search ?? false;
+  }
+  
+  getVersion() {
+    return this.config?.version;
+  }
+}
+```
+
+## KV Data Settings
+
+The system info endpoint reads from the following KV data keys:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `copyrightOwner` | string | Instance owner name |
+| `homePageStatus` | boolean | Public homepage toggle |
+| `searchStatus` | boolean | Search feature toggle |
+| `exposeVersion` | boolean/string | Version visibility toggle |
+
+<Info>
+  Administrators can modify these settings via the [Settings API](/api/settings) or the admin dashboard.
+</Info>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Settings API" icon="gear" href="/api/settings">
+    Admin endpoint for modifying system settings
+  </Card>
+  <Card title="Public Feed" icon="rss" href="/api/posts/list">
+    Retrieve public posts (respects homePageStatus)
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/api/settings">
+    Search functionality (respects searchStatus)
+  </Card>
+</CardGroup>
+
+## Notes
+
+<Note>
+  This endpoint is always available, even when other features are disabled. It's useful for client applications to detect instance capabilities.
+</Note>
+
+<Tip>
+  Cache the system info response on the client side and refresh periodically, as these settings rarely change.
+</Tip>
+
+<Warning>
+  The version information is only exposed when `exposeVersion` is enabled. Administrators may choose to hide this for security reasons.
+</Warning>

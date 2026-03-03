@@ -1,308 +1,64 @@
 ---
 title: URL Shortening
-description: Create shortened links for easy sharing and tracking
+description: Shortened URLs for easy sharing (database and redirect system in place)
 ---
 
 ## Overview
 
-Log includes a built-in URL shortening service that allows users to create short, shareable links. This feature is useful for sharing posts, collections, or external URLs with custom, memorable slugs.
+Log includes the infrastructure for a URL shortening service with database schema and redirect functionality already implemented. The creation UI and API endpoints are planned for future releases.
 
-## What is URL Shortening?
+<Warning>
+  The URL shortening feature is partially implemented. While the database schema and redirect system work, the UI for creating short links is not yet available.
+</Warning>
 
-URL shortening transforms long URLs into compact, easy-to-share links:
+## Current Status
 
+### ✅ Implemented
+- Database schema for storing short URLs
+- Redirect functionality at `/u/[slug]`
+- 404 handling for non-existent short URLs
+
+### 🚧 In Development
+- Web UI for creating short links
+- API endpoint for programmatic link creation
+- Link management dashboard
+- Analytics and tracking
+
+## How It Works
+
+When a short URL is accessed:
+
+1. **Request**: User visits `/u/[slug]`
+2. **Database Lookup**: System queries `url_shorter` table for the slug
+3. **Redirect**: If found, redirects to target URL (HTTP 301)
+4. **404 Handling**: If not found, redirects to `/u/404`
+
+From `~/workspace/source/apps/web/src/app/u/[slug]/route.ts:10-27`:
+
+```typescript
+export const GET = async (request: NextRequest, context) => {
+  const { slug } = await context.params;
+  const data = await db
+    .select()
+    .from(main_schema.urlShorter)
+    .where(dorm.eq(main_schema.urlShorter.urlSlug, slug));
+  
+  if (data.length === 0) {
+    return Response.redirect(new URL("/u/404", request.url), 307);
+  }
+  
+  return Response.redirect(new URL(data[0].targetUrl, request.url), 301);
+};
 ```
-Before: https://yourinstance.com/posts/view/_ITM1a2b3c4d5e6f7g8h9i0j
-After:  https://yourinstance.com/s/sunset
-```
-
-<Card title="Benefits" icon="link">
-  Short URLs are easier to share, remember, and track. They're perfect for social media, printed materials, or anywhere character count matters.
-</Card>
 
 ## Database Schema
 
 Short URLs are stored in the `url_shorter` table:
 
-```typescript
-{
-  id: number,              // Auto-incrementing primary key
-  urlSlug: string,         // Short URL identifier (unique)
-  targetUrl: string,       // Destination URL
-  byUser: string,          // User ID reference
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-### Schema Details
-
-<ParamField path="urlSlug" type="string" required>
-  The short identifier used in the URL (e.g., "sunset" in `/s/sunset`). Must be unique across the instance.
-</ParamField>
-
-<ParamField path="targetUrl" type="string" required>
-  The full destination URL where users will be redirected
-</ParamField>
-
-<ParamField path="byUser" type="string" required>
-  Reference to the user who created the short link
-</ParamField>
-
-## Creating Short Links
-
-### User Workflow
-
-<Steps>
-  <Step title="Access Link Creator">
-    Navigate to the URL shortening interface in your dashboard
-  </Step>
-  <Step title="Enter Target URL">
-    Provide the full URL you want to shorten
-  </Step>
-  <Step title="Choose Slug">
-    Select a custom, memorable slug for your short link
-  </Step>
-  <Step title="Generate">
-    Submit to create your short URL
-  </Step>
-  <Step title="Share">
-    Copy and share your new short link
-  </Step>
-</Steps>
-
-<Info>
-  The URL shortening UI is currently under development. The database schema is in place and ready for implementation.
-</Info>
-
-## Share Link Creation
-
-Log also provides a share link API for creating post-specific short URLs:
-
-```typescript
-// POST /api/data/create_share_link
-// Note: This endpoint is currently in development
-```
-
-<CodeGroup>
-```typescript API Call (Planned)
-const response = await fetch("/api/data/create_share_link", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    postId: "_ITM1a2b3c4d5e6f7g8h9i0j",
-    customSlug: "my-post" // Optional custom slug
-  })
-});
-
-const { shortUrl } = await response.json();
-// Returns: https://yourinstance.com/s/my-post
-```
-</CodeGroup>
-
-## URL Redirection
-
-When users visit a short URL:
-
-1. **Request**: User accesses `/s/[slug]`
-2. **Lookup**: System queries the `url_shorter` table for matching slug
-3. **Redirect**: User is redirected to the target URL
-4. **Tracking**: (Future) Visit statistics are recorded
-
-<Note>
-  Redirection is handled server-side with appropriate HTTP 301 (permanent) or 302 (temporary) status codes.
-</Note>
-
-## Slug Requirements
-
-Slug creation follows these rules:
-
-<AccordionGroup>
-  <Accordion title="Uniqueness">
-    Each slug must be unique across the entire instance. Duplicate slugs are rejected.
-  </Accordion>
-  <Accordion title="Format">
-    Slugs should be URL-safe: lowercase letters, numbers, and hyphens only.
-  </Accordion>
-  <Accordion title="Length">
-    Recommended length: 3-20 characters for optimal memorability and uniqueness.
-  </Accordion>
-  <Accordion title="Reserved Words">
-    Certain slugs may be reserved (e.g., "admin", "api", "dashboard") to prevent conflicts.
-  </Accordion>
-</AccordionGroup>
-
-## Use Cases
-
-### Share Posts Easily
-
-Create memorable links for your posts:
-
-```
-Instead of: /posts/_ITM1a2b3c4d5e6f7g8h9i0j
-Use:        /s/my-latest-photo
-```
-
-### Collection Sharing
-
-Simplify collection URLs:
-
-```
-Instead of: /collections/summer-vacation-2024-hawaii-trip
-Use:        /s/hawaii
-```
-
-### External Links
-
-Shorten and track external links:
-
-```
-Instead of: https://example.com/very/long/path/to/resource?param=value
-Use:        /s/resource
-```
-
-<Card title="Pro Tip" icon="star">
-  Use descriptive slugs that hint at the content. "vacation-photos" is better than "abc123".
-</Card>
-
-## Managing Short Links
-
-### Viewing Your Links
-
-Users can view all their created short links in a management dashboard:
-
-- List of all short URLs
-- Target URL for each link
-- Creation date
-- Edit and delete options
-
-### Editing Links
-
-Short links can be modified:
-
-- **Update Target**: Change where the link redirects
-- **Change Slug**: Modify the short URL identifier (if not in use)
-- **Delete**: Remove the short link entirely
-
-<Warning>
-  Changing a slug that's already been shared will break existing links. Consider creating a new short URL instead.
-</Warning>
-
-## Authentication & Permissions
-
-URL shortening requires authentication:
-
-- Users must be logged in to create short links
-- Users can only edit/delete their own links
-- Admins may have moderation capabilities
-
-```typescript
-// Authentication check
-const session = await auth.api.getSession({ headers });
-if (!session) {
-  return Response.json(
-    { success: false, msg: "Authentication required" },
-    { status: 401 }
-  );
-}
-```
-
-## Link Analytics (Planned)
-
-Future enhancements will include tracking:
-
-<CardGroup cols={2}>
-  <Card title="Click Count" icon="chart-line">
-    Total number of times the link was accessed
-  </Card>
-  <Card title="Geographic Data" icon="globe">
-    Where clicks originated from
-  </Card>
-  <Card title="Referrer Sources" icon="arrow-right-to-bracket">
-    Which sites sent traffic to your link
-  </Card>
-  <Card title="Time Series" icon="calendar">
-    When clicks occurred over time
-  </Card>
-</CardGroup>
-
-## API Reference
-
-### Create Share Link (In Development)
-
-<ResponseField name="POST /api/data/create_share_link" type="endpoint">
-  Creates a short URL for easy sharing.
-
-  **Authentication**: Required
-
-  **Request Body**:
-  ```json
-  {
-    "targetUrl": "https://example.com/path",
-    "customSlug": "optional-slug"
-  }
-  ```
-
-  **Response**:
-  ```json
-  {
-    "success": true,
-    "shortUrl": "https://yourinstance.com/s/slug",
-    "slug": "slug"
-  }
-  ```
-
-  **Error Codes**:
-  - `401`: Not authenticated
-  - `409`: Slug already exists
-  - `400`: Invalid input
-</ResponseField>
-
-## Best Practices
-
-<Steps>
-  <Step title="Use Meaningful Slugs">
-    Choose slugs that indicate the content, making them easier to remember and trust
-  </Step>
-  <Step title="Keep Them Short">
-    The whole point is brevity—aim for concise slugs
-  </Step>
-  <Step title="Avoid Special Characters">
-    Stick to letters, numbers, and hyphens for maximum compatibility
-  </Step>
-  <Step title="Test Before Sharing">
-    Always verify the short link redirects correctly before sharing widely
-  </Step>
-  <Step title="Document Your Links">
-    Keep a record of what each short link is for, especially for campaigns
-  </Step>
-</Steps>
-
-## Security Considerations
-
-<Warning>
-  Short URLs can obscure the destination, which may pose security risks. Log implements several safeguards:
-</Warning>
-
-- **User Association**: All links are tied to user accounts for accountability
-- **Validation**: Target URLs are validated before creation
-- **Moderation**: Admins can review and remove malicious links
-- **Rate Limiting**: (Planned) Prevent abuse through rate limits
-
-<Tip>
-  Users should be cautious when clicking short links from unknown sources, even within trusted platforms.
-</Tip>
-
-## Technical Implementation
-
-### Database Constraints
-
-The schema includes important constraints:
-
 ```sql
 CREATE TABLE url_shorter (
   id INTEGER PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
-  url_slug TEXT NOT NULL UNIQUE,  -- Ensures slug uniqueness
+  url_slug TEXT NOT NULL UNIQUE,
   target_url TEXT NOT NULL,
   by_user TEXT NOT NULL REFERENCES user(id),
   created_at TIMESTAMP DEFAULT NOW(),
@@ -310,20 +66,168 @@ CREATE TABLE url_shorter (
 );
 ```
 
-### Index Optimization
+### Schema Fields
 
-For fast lookups:
+<ParamField path="id" type="integer">
+  Auto-incrementing primary key
+</ParamField>
 
-- Index on `url_slug` for quick slug-to-URL resolution
-- Index on `by_user` for efficient user link queries
+<ParamField path="urlSlug" type="string" required>
+  The short identifier used in the URL (e.g., "sunset" in `/u/sunset`). Must be unique across the instance.
+</ParamField>
 
-## Future Roadmap
+<ParamField path="targetUrl" type="string" required>
+  The full destination URL where users will be redirected
+</ParamField>
 
-Planned enhancements include:
+<ParamField path="byUser" type="string" required>
+  References `user.id` - the user who created the short link
+</ParamField>
 
-1. **QR Code Generation**: Automatic QR codes for each short link
-2. **Expiration Dates**: Time-limited links for campaigns
-3. **Password Protection**: Secure links with optional passwords
-4. **Custom Domains**: Support for branded short domains
-5. **Bulk Creation**: API for creating multiple links at once
-6. **Link Groups**: Organize related short links together
+<ParamField path="createdAt" type="timestamp">
+  When the short link was created
+</ParamField>
+
+<ParamField path="updatedAt" type="timestamp">
+  Last update timestamp
+</ParamField>
+
+## URL Format
+
+Short URLs use the `/u/` prefix:
+
+```
+https://yourinstance.com/u/[slug]
+```
+
+Examples:
+- `https://yourinstance.com/u/sunset` → redirects to target URL
+- `https://yourinstance.com/u/project-demo` → redirects to target URL
+- `https://yourinstance.com/u/invalid` → redirects to `/u/404`
+
+<Note>
+  The slug must be URL-safe (letters, numbers, hyphens, underscores).
+</Note>
+
+## Manual Creation (Database)
+
+Until the UI is implemented, administrators can create short links directly in the database:
+
+```sql
+INSERT INTO url_shorter (url_slug, target_url, by_user)
+VALUES ('my-link', 'https://example.com/full/path', 'user_id_here');
+```
+
+<Warning>
+  Ensure the `url_slug` is unique and the `by_user` references a valid user ID from the `user` table.
+</Warning>
+
+## Use Cases
+
+Once fully implemented, URL shortening will support:
+
+### Share Posts
+Transform long post URLs into memorable links:
+```
+Before: /i/_ITM1a2b3c4d5e6f7g8h9i0j
+After:  /u/my-latest-photo
+```
+
+### Collection Sharing
+Simplify collection URLs:
+```
+Before: /c/summer-vacation-2024-hawaii-trip
+After:  /u/hawaii
+```
+
+### External Links
+Shorten external resources:
+```
+Before: https://example.com/very/long/path?param=value
+After:  /u/resource
+```
+
+## Planned API Endpoint
+
+The creation endpoint exists but returns 403 (not implemented):
+
+```typescript
+POST /api/data/create_share_link
+```
+
+From `~/workspace/source/apps/web/src/app/api/data/create_share_link/route.ts:9-14`:
+
+```typescript
+export const POST = (request: NextRequest) => {
+  const body = request.json();
+  return new Response("ok", {
+    status: 403,  // Not yet implemented
+  });
+};
+```
+
+<Info>
+  This endpoint is reserved for future implementation. Check the project's GitHub issues or roadmap for updates.
+</Info>
+
+## Roadmap
+
+Planned features for the URL shortening system:
+
+<CardGroup cols={2}>
+  <Card title="Creation UI" icon="plus">
+    Web interface for creating short links in the dashboard
+  </Card>
+  <Card title="Link Management" icon="list">
+    View, edit, and delete your short links
+  </Card>
+  <Card title="Analytics" icon="chart-line">
+    Track clicks, referrers, and geographic data
+  </Card>
+  <Card title="API Endpoint" icon="code">
+    Programmatic link creation via REST API
+  </Card>
+</CardGroup>
+
+## Contributing
+
+If you'd like to help implement the URL shortening feature:
+
+1. Check the database schema in `packages/db/src/schema/main.ts:58-67`
+2. The redirect handler is in `apps/web/src/app/u/[slug]/route.ts`
+3. The creation endpoint needs implementation at `apps/web/src/app/api/data/create_share_link/route.ts`
+
+<Tip>
+  The infrastructure is ready—the main work is building the UI and creation API. See the project's [GitHub repository](https://github.com/hpware/log) for contribution guidelines.
+</Tip>
+
+## Technical Details
+
+### Redirect Behavior
+
+- **301 (Permanent Redirect)**: Used for existing short links
+- **307 (Temporary Redirect)**: Used when redirecting to 404 page
+- **Cache-Control**: Redirects are cacheable by browsers
+
+### Database Constraints
+
+- `url_slug` has a UNIQUE constraint to prevent duplicates
+- `by_user` has a foreign key constraint to the `user` table
+- Cascade behavior on user deletion is not yet defined
+
+### Security Considerations
+
+<AccordionGroup>
+  <Accordion title="User Authentication">
+    Short link creation will require authentication to prevent abuse.
+  </Accordion>
+  <Accordion title="URL Validation">
+    Target URLs should be validated to prevent open redirect vulnerabilities.
+  </Accordion>
+  <Accordion title="Rate Limiting">
+    Implementation should include rate limiting to prevent spam.
+  </Accordion>
+  <Accordion title="Moderation">
+    Admins should have the ability to review and remove malicious links.
+  </Accordion>
+</AccordionGroup>

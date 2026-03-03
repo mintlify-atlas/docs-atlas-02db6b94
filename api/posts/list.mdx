@@ -1,0 +1,386 @@
+---
+title: List Posts
+description: Retrieve posts for authenticated users and public feeds
+---
+
+## Endpoints
+
+Log provides two endpoints for retrieving posts:
+
+### Get User's Posts (Authenticated)
+
+```
+GET /api/data/all_posts?offset={number}&status={status}
+```
+
+Retrieves posts for the authenticated user with pagination and optional status filtering.
+
+### Get Public Feed
+
+```
+GET /api/data/public_data?offset={number}&user={userId}
+```
+
+Retrieves public posts with optional user filtering. Can be disabled by administrators.
+
+---
+
+## Get User's Posts
+
+Retrieve all posts belonging to the authenticated user.
+
+### Authentication
+
+**Required** - User must be logged in with a valid session.
+
+### Query Parameters
+
+<ParamField query="offset" type="number" required>
+  Pagination offset (0-based). Must be a safe integer.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by post status. Options: `draft`, `private`, `public`, or `unlisted`. If omitted, returns all posts.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Whether the request succeeded
+</ResponseField>
+
+<ResponseField name="msg" type="string" required>
+  Error message if success is false
+</ResponseField>
+
+<ResponseField name="result" type="array" required>
+  Array of post objects (max 100 posts per request)
+</ResponseField>
+
+<ResponseField name="nextOffset" type="number | undefined">
+  Offset for the next page. `undefined` if no more posts available.
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```javascript JavaScript
+const response = await fetch('/api/data/all_posts?offset=0&status=public', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  credentials: 'include'
+});
+
+const data = await response.json();
+console.log(data.result); // Array of posts
+console.log(data.nextOffset); // 100 or undefined
+```
+
+```bash cURL
+curl "https://yourinstance.com/api/data/all_posts?offset=0&status=draft" \
+  -H "Cookie: your-session-cookie"
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://yourinstance.com/api/data/all_posts',
+    params={'offset': 0, 'status': 'public'},
+    cookies={'session': 'your-session-cookie'}
+)
+
+data = response.json()
+print(f"Posts: {len(data['result'])}")
+print(f"Next offset: {data.get('nextOffset')}")
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "msg": "",
+  "result": [
+    {
+      "postId": "_ITM1a2b3c4d5e6f7g8h9i0j",
+      "type": "photos",
+      "status": "public",
+      "byUser": "user-id",
+      "textData": "Beautiful sunset today",
+      "imageUrl": "/api/data/files/sunset.jpg",
+      "videoUrl": null,
+      "tags": ["nature", "photography"],
+      "createdAt": "2024-03-15T18:30:00.000Z",
+      "updatedAt": "2024-03-15T18:30:00.000Z"
+    }
+  ],
+  "nextOffset": 100
+}
+```
+
+### Error Responses
+
+<ResponseField name="401 Unauthorized" type="error">
+  User is not authenticated
+  ```json
+  {
+    "success": false,
+    "msg": "ERR_NOT_LOGGED_IN",
+    "result": []
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400 Bad Request" type="error">
+  Invalid offset parameter
+  ```json
+  {
+    "success": false,
+    "msg": "ERR_OFFSET_PARAM_NOT_A_SAFE_INTEGER",
+    "result": []
+  }
+  ```
+</ResponseField>
+
+### Pagination
+
+From `~/workspace/source/apps/web/src/app/api/data/all_posts/route.ts:40-52`:
+
+```typescript
+const dbResult = await db
+  .select()
+  .from(main_schema.userPosts)
+  .where(query)
+  .orderBy(dorm.desc(main_schema.userPosts.createdAt))
+  .limit(100)
+  .offset(Number(offset));
+
+return Response.json({
+  success: true,
+  msg: "",
+  result: dbResult,
+  nextOffset: dbResult.length < 100 ? undefined : Number(offset) + 100,
+});
+```
+
+- Returns up to **100 posts** per request
+- Posts ordered by `createdAt` (newest first)
+- `nextOffset` is `undefined` when no more posts exist
+
+---
+
+## Get Public Feed
+
+Retrieve public posts from all users or a specific user.
+
+### Authentication
+
+**Not required** - This is a public endpoint.
+
+### Query Parameters
+
+<ParamField query="offset" type="number" required>
+  Pagination offset (0-based). Must be a safe integer.
+</ParamField>
+
+<ParamField query="user" type="string">
+  Filter posts by user ID. If omitted, returns posts from all users.
+</ParamField>
+
+### Feature Toggle
+
+This endpoint can be disabled by administrators via the `homePageStatus` setting. When disabled, returns an empty result with `featDisabled: true`.
+
+From `~/workspace/source/apps/web/src/app/api/data/public_data/route.ts:29-42`:
+
+```typescript
+const homePageStatus = await db
+  .select()
+  .from(main_schema.kvData)
+  .where(dorm.eq(main_schema.kvData.key, "homePageStatus"));
+
+if (String(homePageStatus[0].value) === "false") {
+  return Response.json({
+    success: true,
+    msg: "",
+    result: [],
+    nextOffset: undefined,
+    featDisabled: true,
+  });
+}
+```
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Whether the request succeeded
+</ResponseField>
+
+<ResponseField name="msg" type="string" required>
+  Error message if success is false
+</ResponseField>
+
+<ResponseField name="result" type="array" required>
+  Array of public post objects (max 50 posts per request)
+</ResponseField>
+
+<ResponseField name="nextOffset" type="number | undefined">
+  Offset for the next page. `undefined` if no more posts available.
+</ResponseField>
+
+<ResponseField name="featDisabled" type="boolean" required>
+  Whether the public feed is disabled by the administrator
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```javascript JavaScript
+// Get all public posts
+const response = await fetch('/api/data/public_data?offset=0');
+const data = await response.json();
+
+if (data.featDisabled) {
+  console.log('Public feed is disabled');
+} else {
+  console.log(`Loaded ${data.result.length} posts`);
+}
+```
+
+```bash cURL
+# Get all public posts
+curl "https://yourinstance.com/api/data/public_data?offset=0"
+
+# Get public posts from specific user
+curl "https://yourinstance.com/api/data/public_data?offset=0&user=user123"
+```
+
+```python Python
+import requests
+
+# Get all public posts
+response = requests.get(
+    'https://yourinstance.com/api/data/public_data',
+    params={'offset': 0}
+)
+
+data = response.json()
+if data['featDisabled']:
+    print('Public feed is disabled')
+else:
+    print(f"Posts: {len(data['result'])}")
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "msg": "",
+  "result": [
+    {
+      "postId": "_ITM9z8y7x6w5v4u3t2s1r0",
+      "type": "text",
+      "status": "public",
+      "byUser": "user-id",
+      "textData": "Just deployed a new feature!",
+      "imageUrl": null,
+      "videoUrl": null,
+      "tags": ["development", "milestone"],
+      "createdAt": "2024-03-15T20:00:00.000Z",
+      "updatedAt": "2024-03-15T20:00:00.000Z"
+    }
+  ],
+  "nextOffset": 50,
+  "featDisabled": false
+}
+```
+
+### Pagination
+
+- Returns up to **50 posts** per request
+- Posts ordered by `createdAt` (newest first)
+- Only posts with `status: "public"` are returned
+- `nextOffset` is `undefined` when no more posts exist
+
+<Note>
+  The public feed returns fewer posts per page (50) compared to the authenticated endpoint (100) to reduce server load.
+</Note>
+
+---
+
+## Error Codes
+
+Both endpoints may return these errors:
+
+| Error Code | Description |
+|------------|-------------|
+| `ERR_NOT_LOGGED_IN` | User authentication required (authenticated endpoint only) |
+| `ERR_NO_PARAMS_TO_USE` | Missing required `offset` parameter |
+| `ERR_OFFSET_PARAM_NOT_A_NUMBER` | Offset is not a valid number |
+| `ERR_OFFSET_PARAM_NOT_A_SAFE_INTEGER` | Offset exceeds safe integer range |
+
+## Use Cases
+
+### Building a Dashboard
+
+```javascript
+async function loadUserPosts(status = null) {
+  let offset = 0;
+  let allPosts = [];
+  
+  while (true) {
+    const url = status 
+      ? `/api/data/all_posts?offset=${offset}&status=${status}`
+      : `/api/data/all_posts?offset=${offset}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    allPosts.push(...data.result);
+    
+    if (!data.nextOffset) break;
+    offset = data.nextOffset;
+  }
+  
+  return allPosts;
+}
+```
+
+### Building a Public Feed
+
+```javascript
+async function loadPublicFeed(userId = null) {
+  const url = userId
+    ? `/api/data/public_data?offset=0&user=${userId}`
+    : `/api/data/public_data?offset=0`;
+  
+  const response = await fetch(url);
+  const data = await response.json();
+  
+  if (data.featDisabled) {
+    return { disabled: true, posts: [] };
+  }
+  
+  return { disabled: false, posts: data.result };
+}
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create Post" icon="plus" href="/api/posts/create">
+    Create new posts with text, photos, or videos
+  </Card>
+  <Card title="Modify Post" icon="pen" href="/api/posts/modify">
+    Edit or delete existing posts
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/api/settings">
+    Search posts by text content (see Settings API)
+  </Card>
+</CardGroup>

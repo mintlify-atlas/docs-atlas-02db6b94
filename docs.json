@@ -71,6 +71,7 @@
             "group": "Posts",
             "pages": [
               "api/posts/overview",
+              "api/posts/list",
               "api/posts/create",
               "api/posts/modify",
               "api/posts/publish"
@@ -98,6 +99,12 @@
             "group": "Settings",
             "pages": [
               "api/settings"
+            ]
+          },
+          {
+            "group": "System",
+            "pages": [
+              "api/system"
             ]
           }
         ]
